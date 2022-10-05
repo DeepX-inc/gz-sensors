@@ -5,7 +5,6 @@ set(dri_tests
   camera.cc
   depth_camera.cc
   distortion_camera.cc
-  gpu_lidar_sensor.cc
   rgbd_camera.cc
   segmentation_camera.cc
   thermal_camera.cc
