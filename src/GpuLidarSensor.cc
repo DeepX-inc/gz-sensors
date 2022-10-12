@@ -73,7 +73,7 @@ class ignition::sensors::GpuLidarSensorPrivate
   public: transport::Node::Publisher pointPub;
 
   /// \brief Scanning pattern.
-  public: std::string scanningPattern = "avia";
+  public: ignition::rendering::ScanningPattern scanningPattern = ignition::rendering::ScanningPattern::AVIA;
 };
 
 //////////////////////////////////////////////////
@@ -134,10 +134,22 @@ bool GpuLidarSensor::Load(const sdf::Sensor &_sdf)
 
   if (_sdf.Element()->HasElement("scanning_pattern"))
   {
-    auto pattern = _sdf.Element()->Get<std::string>("scanning_pattern");
-    if (pattern == "rasterizing")
+    auto pattern = _sdf.Element()->Get<std::string>("scanning_pattern");\
+    
+    std::unordered_map<std::string, ignition::rendering::ScanningPattern> patterns {
+      {"avia", ignition::rendering::ScanningPattern::AVIA},
+      {"rasterization", ignition::rendering::ScanningPattern::RASTERIZATION},
+    };
+
+    if (patterns.find(pattern) != patterns.end())
     {
-      this->dataPtr->scanningPattern = pattern;
+      this->dataPtr->scanningPattern = patterns[pattern];
+    }
+    else
+    {
+      ignerr << "Unable to create a lidar with pattern [" 
+             << pattern << "]" << std::endl;
+      return false;
     }
   }
 
