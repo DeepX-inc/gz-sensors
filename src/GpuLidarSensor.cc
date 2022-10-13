@@ -71,6 +71,9 @@ class ignition::sensors::GpuLidarSensorPrivate
 
   /// \brief Publisher for the publish point cloud message.
   public: transport::Node::Publisher pointPub;
+
+  /// \brief Scanning pattern.
+  public: ignition::rendering::ScanningPattern scanningPattern = ignition::rendering::ScanningPattern::AVIA;
 };
 
 //////////////////////////////////////////////////
@@ -127,6 +130,27 @@ bool GpuLidarSensor::Load(const sdf::Sensor &_sdf)
   if (!Lidar::Load(_sdf))
   {
     return false;
+  }
+
+  if (_sdf.Element()->HasElement("scanning_pattern"))
+  {
+    auto pattern = _sdf.Element()->Get<std::string>("scanning_pattern");
+    
+    const std::unordered_map<std::string, ignition::rendering::ScanningPattern> patterns {
+      {"avia", ignition::rendering::ScanningPattern::AVIA},
+      {"rasterization", ignition::rendering::ScanningPattern::RASTERIZATION},
+    };
+
+    if (patterns.find(pattern) != patterns.end())
+    {
+      this->dataPtr->scanningPattern = patterns.at(pattern);
+    }
+    else
+    {
+      ignerr << "Unable to create a lidar with pattern [" 
+             << pattern << "]" << std::endl;
+      return false;
+    }
   }
 
   // Initialize the point message.
@@ -233,6 +257,8 @@ bool GpuLidarSensor::CreateLidar()
       std::bind(&GpuLidarSensor::OnNewLidarFrame, this,
       std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
       std::placeholders::_4, std::placeholders::_5));
+    
+  this->dataPtr->gpuRays->SetScanningPattern(this->dataPtr->scanningPattern);
 
   this->AddSensor(this->dataPtr->gpuRays);
 
