@@ -73,7 +73,7 @@ class ignition::sensors::GpuLidarSensorPrivate
   public: transport::Node::Publisher pointPub;
 
   /// \brief Scanning pattern.
-  public: ignition::rendering::ScanningPattern scanningPattern = ignition::rendering::ScanningPattern::AVIA;
+  public: ignition::rendering::ScanningPattern scanningPattern = ignition::rendering::ScanningPattern::RASTERIZATION;
 };
 
 //////////////////////////////////////////////////
