@@ -28,7 +28,7 @@ jobs:
         run: |
           docker build -t deepx-gz-sensors .
       
-      - name: Build gz-rendering and test
+      - name: Build gz-rendering and gz-sensors, and then test gz-sensors
         run: |
           docker run deepx-gz-sensors:latest bash \
           -c 'cd /root/gazebo/gz-rendering/build; \
