@@ -2,7 +2,12 @@ name: DeepX CI
 
 run-name: Build Docker container and perform unit testing
 
-on: [push, workflow_dispatch]
+on: 
+  push:
+    branches: [ign-sensors6]
+  pull_request:
+    branches: [ign-sensors6]
+  workflow_dispatch:
 
 jobs:
   build-library:
@@ -21,8 +26,15 @@ jobs:
 
       - name: Build and commit the Docker container
         run: |
-          docker build --build-arg BASE_IMAGE=ghcr.io/deepx-inc/base_images --build-arg TAG=foxy -t deepx-gz-sensors .
+          docker build -t deepx-gz-sensors .
       
-      - name: Run tests
+      - name: Build gz-rendering and test
         run: |
-          docker run deepx-gz-sensors:latest bash -c 'cd /root/gazebo/gz-sensors/build; cmake ..; make install/; ctest;'
+          docker run deepx-gz-sensors:latest bash \
+          -c 'cd /root/gazebo/gz-rendering/build; \
+          cmake ..; \
+          cmake --build . --target install; \
+          cd /root/gazebo/gz-sensors/build; \
+          cmake ..; \
+          cmake --build . --target install; \
+          ctest;'

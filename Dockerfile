@@ -1,20 +1,13 @@
+
 # Adds DeepX Gazebo Sensors image.
-#
-# Arguments:
-# - BASE_IMAGE: Base image.
-# - TAG: Tag of the BASE_IMAGE.
 #
 # Docker commands:
 # - To build the image:
-#   docker build --build-arg BASE_IMAGE=ghcr.io/deepx-inc/base_images --build-arg TAG=foxy -t deepx-gz-sensors .
+#   docker build -t deepx-gz-sensors .
 # - To publish the image:
 #   docker push ghcr.io/deepx-inc/deepx-gz-sensors
 
-
-ARG BASE_IMAGE
-ARG TAG
-ARG FROM_SOURCE
-FROM ${BASE_IMAGE}:${TAG} AS DEEPX_GZ_SENSORS
+FROM ghcr.io/deepx-inc/base_images:foxy
 
 # ---BUILD TOOLS---
 RUN apt -qq update \
@@ -27,7 +20,7 @@ RUN apt -qq update \
     gnupg \
     libfreeimage-dev \
     libglew-dev \
-    libogre-2.1-dev \
+    libogre-2.2-dev \
     libxi-dev \
     libxmu-dev \
     ninja-build \
@@ -38,23 +31,6 @@ RUN apt -qq update \
     lsb-release \
     wget \
     curl
-
-# ---Temporary solution to stop flikering in gazebo
-# Before mesa version 22.0.2, there was no flickering issue.
-# After doing apt update && apt upgrade, the flickering appears.
-# This flickering is observed in mesa version 22.1.1
-# [TODO] Remove this apt-mark hold, after the issue is solved.
-RUN apt-mark hold \
-    libegl-mesa0 \
-    libegl1-mesa-dev \
-    libgl1-mesa-dev \
-    libgl1-mesa-dri \
-    libglapi-mesa \
-    libgles2-mesa-dev \
-    libglu1-mesa-dev \
-    libglu1-mesa \
-    libglx-mesa0 \
-    mesa-utils
 
 # ---STANDARD GAZEBO INSTALL---
 RUN apt -qq update && \
@@ -87,9 +63,11 @@ RUN apt -qq update && \
 
 WORKDIR "/root/gazebo"
 
+# ---PREPARE GZ-RENDERING DIRECTORY---
+RUN git clone -b 2022.10.19 --single-branch https://github.com/DeepX-inc/gz-rendering.git && \
+    mkdir -p gz-rendering/build
+
+# ---PREPARE GZ-SENSORS DIRECTORY---
 COPY . gz-sensors/
 
-RUN mkdir -p gz-sensors/build && \
-    cd gz-sensors/build && \
-    cmake .. && \ 
-    make install
+RUN mkdir -p gz-sensors/build
