@@ -64,7 +64,7 @@ RUN apt -qq update && \
 WORKDIR "/root/gazebo"
 
 # ---PREPARE GZ-RENDERING DIRECTORY---
-RUN git clone -b 2022.10.21 --single-branch https://github.com/DeepX-inc/gz-rendering.git && \
+RUN git clone https://github.com/DeepX-inc/gz-rendering.git && \
     mkdir -p gz-rendering/build
 
 # ---PREPARE GZ-SENSORS DIRECTORY---
