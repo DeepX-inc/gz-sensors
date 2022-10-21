@@ -1,0 +1,40 @@
+name: DeepX CI
+
+run-name: Build Docker container and perform unit testing
+
+on: 
+  push:
+    branches: [ign-sensors6]
+  pull_request:
+    branches: [ign-sensors6]
+  workflow_dispatch:
+
+jobs:
+  build-library:
+    runs-on: ubuntu-20.04
+    name: Build and test
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Login to Github Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: deepx-inc
+          password: ${{ github.token }}
+
+      - name: Build and commit the Docker container
+        run: |
+          docker build -t deepx-gz-sensors .
+      
+      - name: Build gz-rendering and gz-sensors, and then test gz-sensors
+        run: |
+          docker run deepx-gz-sensors:latest bash \
+          -c 'cd /root/gazebo/gz-rendering/build; \
+          cmake ..; \
+          cmake --build . --target install; \
+          cd /root/gazebo/gz-sensors/build; \
+          cmake ..; \
+          cmake --build . --target install; \
+          ctest;'
