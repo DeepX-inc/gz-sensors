@@ -7,7 +7,7 @@
 # - To publish the image:
 #   docker push ghcr.io/deepx-inc/deepx-gz-sensors
 
-FROM ghcr.io/deepx-inc/base_images:foxy
+FROM ghcr.io/deepx-inc/base_images:1.0.0-foxy
 
 # ---BUILD TOOLS---
 RUN apt -qq update \
