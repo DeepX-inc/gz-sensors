@@ -14,47 +14,41 @@
  * limitations under the License.
  *
 */
-#ifdef _WIN32
-#pragma warning(push)
-#pragma warning(disable: 4005)
-#pragma warning(disable: 4251)
-#endif
-#include <ignition/msgs/camera_info.pb.h>
-#ifdef _WIN32
-#pragma warning(pop)
-#endif
+
+#include <gz/msgs/boolean.pb.h>
+#include <gz/msgs/camera_info.pb.h>
+#include <gz/msgs/image.pb.h>
 
 #include <mutex>
 
-#include <ignition/common/Console.hh>
-#include <ignition/common/Event.hh>
-#include <ignition/common/Image.hh>
-#include <ignition/common/Profiler.hh>
-#include <ignition/common/StringUtils.hh>
-#include <ignition/math/Angle.hh>
-#include <ignition/math/Helpers.hh>
-#include <ignition/transport/Node.hh>
+#include <gz/common/Console.hh>
+#include <gz/common/Event.hh>
+#include <gz/common/Image.hh>
+#include <gz/common/Profiler.hh>
+#include <gz/common/StringUtils.hh>
+#include <gz/math/Angle.hh>
+#include <gz/math/Helpers.hh>
+#include <gz/msgs/Utility.hh>
+#include <gz/transport/Node.hh>
 
-#include "ignition/sensors/CameraSensor.hh"
-#include "ignition/sensors/ImageBrownDistortionModel.hh"
-#include "ignition/sensors/ImageDistortion.hh"
-#include "ignition/sensors/ImageGaussianNoiseModel.hh"
-#include "ignition/sensors/ImageNoise.hh"
-#include "ignition/sensors/Manager.hh"
-#include "ignition/sensors/RenderingEvents.hh"
-#include "ignition/sensors/SensorFactory.hh"
-#include "ignition/sensors/SensorTypes.hh"
+#include "gz/sensors/CameraSensor.hh"
+#include "gz/sensors/ImageBrownDistortionModel.hh"
+#include "gz/sensors/ImageDistortion.hh"
+#include "gz/sensors/ImageGaussianNoiseModel.hh"
+#include "gz/sensors/ImageNoise.hh"
+#include "gz/sensors/Manager.hh"
+#include "gz/sensors/RenderingEvents.hh"
+#include "gz/sensors/SensorFactory.hh"
+#include "gz/sensors/SensorTypes.hh"
 
-using namespace ignition;
+#include "gz/rendering/Utils.hh"
+
+using namespace gz;
 using namespace sensors;
 
 /// \brief Private data for CameraSensor
-class ignition::sensors::CameraSensorPrivate
+class gz::sensors::CameraSensorPrivate
 {
-  /// \brief Callback for triggered subscription
-  /// \param[in] _msg Boolean message
-  public: void OnTrigger(const ignition::msgs::Boolean &_msg);
-
   /// \brief Save an image
   /// \param[in] _data the image data to be saved
   /// \param[in] _width width of image in pixels
@@ -65,7 +59,70 @@ class ignition::sensors::CameraSensorPrivate
   /// of the path was not possible.
   /// \sa ImageSaver
   public: bool SaveImage(const unsigned char *_data, unsigned int _width,
-    unsigned int _height, ignition::common::Image::PixelFormatType _format);
+    unsigned int _height, gz::common::Image::PixelFormatType _format);
+
+  /// \brief Computes the OpenGL NDC matrix
+  /// \param[in] _left Left vertical clipping plane
+  /// \param[in] _right Right vertical clipping plane
+  /// \param[in] _bottom Bottom horizontal clipping plane
+  /// \param[in] _top Top horizontal clipping plane
+  /// \param[in] _near Distance to the nearer depth clipping plane
+  ///            This value is negative if the plane is to be behind
+  ///            the camera
+  /// \param[in] _far Distance to the farther depth clipping plane
+  ///            This value is negative if the plane is to be behind
+  ///            the camera
+  /// \return OpenGL NDC (Normalized Device Coordinates) matrix
+  public: static math::Matrix4d BuildNDCMatrix(
+          double _left, double _right,
+          double _bottom, double _top,
+          double _near, double _far);
+
+  /// \brief Computes the OpenGL perspective matrix
+  /// \param[in] _intrinsicsFx Horizontal focal length (in pixels)
+  /// \param[in] _intrinsicsFy Vertical focal length (in pixels)
+  /// \param[in] _intrinsicsCx X coordinate of principal point in pixels
+  /// \param[in] _intrinsicsCy Y coordinate of principal point in pixels
+  /// \param[in] _intrinsicsS Skew coefficient defining the angle between
+  ///            the x and y pixel axes
+  /// \param[in] _clipNear Distance to the nearer depth clipping plane
+  ///            This value is negative if the plane is to be behind
+  ///            the camera
+  /// \param[in] _clipFar Distance to the farther depth clipping plane
+  ///            This value is negative if the plane is to be behind
+  ///            the camera
+  /// \return OpenGL perspective matrix
+  public: static math::Matrix4d BuildPerspectiveMatrix(
+          double _intrinsicsFx, double _intrinsicsFy,
+          double _intrinsicsCx, double _intrinsicsCy,
+          double _intrinsicsS,
+          double _clipNear, double _clipFar);
+
+  /// \brief Computes the OpenGL projection matrix by multiplying
+  ///        the OpenGL Normalized Device Coordinates matrix (NDC) with
+  ///        the OpenGL perspective matrix
+  ///        openglProjectionMatrix = ndcMatrix * perspectiveMatrix
+  /// \param[in] _imageWidth Image width (in pixels)
+  /// \param[in] _imageHeight Image height (in pixels)
+  /// \param[in] _intrinsicsFx Horizontal focal length (in pixels)
+  /// \param[in] _intrinsicsFy Vertical focal length (in pixels)
+  /// \param[in] _intrinsicsCx X coordinate of principal point in pixels
+  /// \param[in] _intrinsicsCy Y coordinate of principal point in pixels
+  /// \param[in] _intrinsicsS Skew coefficient defining the angle between
+  ///             the x and y pixel axes
+  /// \param[in] _clipNear Distance to the nearer depth clipping plane
+  ///            This value is negative if the plane is to be behind
+  ///            the camera
+  /// \param[in] _clipFar Distance to the farther depth clipping plane
+  ///            This value is negative if the plane is to be behind
+  ///            the camera
+  /// \return OpenGL projection matrix
+  public: static math::Matrix4d BuildProjectionMatrix(
+          double _imageWidth, double _imageHeight,
+          double _intrinsicsFx, double _intrinsicsFy,
+          double _intrinsicsCx, double _intrinsicsCy,
+          double _intrinsicsS,
+          double _clipNear, double _clipFar);
 
   /// \brief node to create publisher
   public: transport::Node node;
@@ -80,10 +137,10 @@ class ignition::sensors::CameraSensorPrivate
   public: bool initialized = false;
 
   /// \brief Rendering camera
-  public: ignition::rendering::CameraPtr camera;
+  public: gz::rendering::CameraPtr camera;
 
   /// \brief Pointer to an image to be published
-  public: ignition::rendering::Image image;
+  public: gz::rendering::Image image;
 
   /// \brief Noise added to sensor data
   public: std::map<SensorNoiseType, NoisePtr> noises;
@@ -93,11 +150,11 @@ class ignition::sensors::CameraSensorPrivate
 
   /// \brief Event that is used to trigger callbacks when a new image
   /// is generated
-  public: ignition::common::EventT<
-          void(const ignition::msgs::Image &)> imageEvent;
+  public: gz::common::EventT<
+          void(const gz::msgs::Image &)> imageEvent;
 
   /// \brief Connection to the Manager's scene change event.
-  public: ignition::common::ConnectionPtr sceneChangeConnection;
+  public: gz::common::ConnectionPtr sceneChangeConnection;
 
   /// \brief Just a mutex for thread safety
   public: std::mutex mutex;
@@ -145,14 +202,12 @@ class ignition::sensors::CameraSensorPrivate
 //////////////////////////////////////////////////
 bool CameraSensor::CreateCamera()
 {
-  const sdf::Camera *cameraSdf = this->dataPtr->sdfSensor.CameraSensor();
+  sdf::Camera *cameraSdf = this->dataPtr->sdfSensor.CameraSensor();
   if (!cameraSdf)
   {
-    ignerr << "Unable to access camera SDF element.\n";
+    gzerr << "Unable to access camera SDF element.\n";
     return false;
   }
-
-  this->PopulateInfo(cameraSdf);
 
   unsigned int width = cameraSdf->ImageWidth();
   unsigned int height = cameraSdf->ImageHeight();
@@ -183,19 +238,19 @@ bool CameraSensor::CreateCamera()
     }
     else if (noiseSdf.Type() != sdf::NoiseType::NONE)
     {
-      ignwarn << "The camera sensor only supports Gaussian noise. "
+      gzwarn << "The camera sensor only supports Gaussian noise. "
        << "The supplied noise type[" << static_cast<int>(noiseSdf.Type())
        << "] is not supported." << std::endl;
     }
   }
 
   // \todo(nkoeng) these parameters via sdf
-  this->dataPtr->camera->SetAntiAliasing(2);
+  this->dataPtr->camera->SetAntiAliasing(cameraSdf->AntiAliasingValue());
 
   math::Angle angle = cameraSdf->HorizontalFov();
-  if (angle < 0.01 || angle > IGN_PI*2)
+  if (angle < 0.01 || angle > GZ_PI*2)
   {
-    ignerr << "Invalid horizontal field of view [" << angle << "]\n";
+    gzerr << "Invalid horizontal field of view [" << angle << "]\n";
 
     return false;
   }
@@ -215,18 +270,63 @@ bool CameraSensor::CreateCamera()
   switch (pixelFormat)
   {
     case sdf::PixelFormatType::RGB_INT8:
-      this->dataPtr->camera->SetImageFormat(ignition::rendering::PF_R8G8B8);
+      this->dataPtr->camera->SetImageFormat(rendering::PF_R8G8B8);
       break;
     case sdf::PixelFormatType::L_INT8:
-      this->dataPtr->camera->SetImageFormat(ignition::rendering::PF_L8);
+      this->dataPtr->camera->SetImageFormat(rendering::PF_L8);
       break;
     case sdf::PixelFormatType::L_INT16:
-      this->dataPtr->camera->SetImageFormat(ignition::rendering::PF_L16);
+      this->dataPtr->camera->SetImageFormat(rendering::PF_L16);
+      break;
+    case sdf::PixelFormatType::BAYER_RGGB8:
+      this->dataPtr->camera->SetImageFormat(rendering::PF_BAYER_RGGB8);
+      break;
+    case sdf::PixelFormatType::BAYER_BGGR8:
+      this->dataPtr->camera->SetImageFormat(rendering::PF_BAYER_BGGR8);
+      break;
+    case sdf::PixelFormatType::BAYER_GBRG8:
+      this->dataPtr->camera->SetImageFormat(rendering::PF_BAYER_GBRG8);
+      break;
+    case sdf::PixelFormatType::BAYER_GRBG8:
+      this->dataPtr->camera->SetImageFormat(rendering::PF_BAYER_GRBG8);
       break;
     default:
-      ignerr << "Unsupported pixel format ["
+      gzerr << "Unsupported pixel format ["
         << static_cast<int>(pixelFormat) << "]\n";
       break;
+  }
+
+  // Update the DOM object intrinsics to have consistent
+  // intrinsics between ogre camera and camera_info msg
+  if(!cameraSdf->HasLensIntrinsics())
+  {
+    auto intrinsicMatrix =
+      gz::rendering::projectionToCameraIntrinsic(
+        this->dataPtr->camera->ProjectionMatrix(),
+        this->dataPtr->camera->ImageWidth(),
+        this->dataPtr->camera->ImageHeight()
+      );
+
+    cameraSdf->SetLensIntrinsicsFx(intrinsicMatrix(0, 0));
+    cameraSdf->SetLensIntrinsicsFy(intrinsicMatrix(1, 1));
+    cameraSdf->SetLensIntrinsicsCx(intrinsicMatrix(0, 2));
+    cameraSdf->SetLensIntrinsicsCy(intrinsicMatrix(1, 2));
+  }
+  // set custom projection matrix based on intrinsics param specified in sdf
+  else
+  {
+    double fx = cameraSdf->LensIntrinsicsFx();
+    double fy = cameraSdf->LensIntrinsicsFy();
+    double cx = cameraSdf->LensIntrinsicsCx();
+    double cy = cameraSdf->LensIntrinsicsCy();
+    double s = cameraSdf->LensIntrinsicsSkew();
+    auto projectionMatrix = CameraSensorPrivate::BuildProjectionMatrix(
+        this->dataPtr->camera->ImageWidth(),
+        this->dataPtr->camera->ImageHeight(),
+        fx, fy, cx, cy, s,
+        this->dataPtr->camera->NearClipPlane(),
+        this->dataPtr->camera->FarClipPlane());
+    this->dataPtr->camera->SetProjectionMatrix(projectionMatrix);
   }
 
   this->dataPtr->image = this->dataPtr->camera->CreateImage();
@@ -241,6 +341,51 @@ bool CameraSensor::CreateCamera()
     this->dataPtr->saveImage = true;
   }
 
+  // Update the DOM object intrinsics to have consistent
+  // projection matrix values between ogre camera and camera_info msg
+  // If these values are not defined in the SDF then we need to update
+  // these values to something reasonable. The projection matrix is
+  // the cumulative effect of intrinsic and extrinsic parameters
+  if(!cameraSdf->HasLensProjection())
+  {
+    // Note that the matrix from Ogre via camera->ProjectionMatrix() has a
+    // different format than the projection matrix used in SDFormat.
+    // This is why they are converted using projectionToCameraIntrinsic.
+    // The resulting matrix is the intrinsic matrix, but since the user has
+    // not overridden the values, this is also equal to the projection matrix.
+    auto intrinsicMatrix =
+      gz::rendering::projectionToCameraIntrinsic(
+        this->dataPtr->camera->ProjectionMatrix(),
+        this->dataPtr->camera->ImageWidth(),
+        this->dataPtr->camera->ImageHeight()
+      );
+    cameraSdf->SetLensProjectionFx(intrinsicMatrix(0, 0));
+    cameraSdf->SetLensProjectionFy(intrinsicMatrix(1, 1));
+    cameraSdf->SetLensProjectionCx(intrinsicMatrix(0, 2));
+    cameraSdf->SetLensProjectionCy(intrinsicMatrix(1, 2));
+  }
+  // set custom projection matrix based on projection param specified in sdf
+  else
+  {
+    // tx and ty are not used
+    double fx = cameraSdf->LensProjectionFx();
+    double fy = cameraSdf->LensProjectionFy();
+    double cx = cameraSdf->LensProjectionCx();
+    double cy = cameraSdf->LensProjectionCy();
+    double s = 0;
+
+    auto projectionMatrix = CameraSensorPrivate::BuildProjectionMatrix(
+        this->dataPtr->camera->ImageWidth(),
+        this->dataPtr->camera->ImageHeight(),
+        fx, fy, cx, cy, s,
+        this->dataPtr->camera->NearClipPlane(),
+        this->dataPtr->camera->FarClipPlane());
+    this->dataPtr->camera->SetProjectionMatrix(projectionMatrix);
+  }
+
+  // Populate camera info topic
+  this->PopulateInfo(cameraSdf);
+
   return true;
 }
 
@@ -253,6 +398,10 @@ CameraSensor::CameraSensor()
 //////////////////////////////////////////////////
 CameraSensor::~CameraSensor()
 {
+  if (this->Scene() && this->dataPtr->camera)
+  {
+    this->Scene()->DestroySensor(this->dataPtr->camera);
+  }
 }
 
 //////////////////////////////////////////////////
@@ -274,13 +423,13 @@ bool CameraSensor::Load(const sdf::Sensor &_sdf)
   // Check if this is the right type
   if (_sdf.Type() != sdf::SensorType::CAMERA)
   {
-    ignerr << "Attempting to a load a Camera sensor, but received "
+    gzerr << "Attempting to a load a Camera sensor, but received "
       << "a " << _sdf.TypeStr() << std::endl;
   }
 
   if (_sdf.CameraSensor() == nullptr)
   {
-    ignerr << "Attempting to a load a Camera sensor, but received "
+    gzerr << "Attempting to a load a Camera sensor, but received "
       << "a null sensor." << std::endl;
     return false;
   }
@@ -290,17 +439,22 @@ bool CameraSensor::Load(const sdf::Sensor &_sdf)
   if (this->Topic().empty())
     this->SetTopic("/camera");
 
+  if (!_sdf.CameraSensor()->CameraInfoTopic().empty())
+  {
+    this->dataPtr->infoTopic = _sdf.CameraSensor()->CameraInfoTopic();
+  }
+
   this->dataPtr->pub =
-      this->dataPtr->node.Advertise<ignition::msgs::Image>(
+      this->dataPtr->node.Advertise<gz::msgs::Image>(
           this->Topic());
   if (!this->dataPtr->pub)
   {
-    ignerr << "Unable to create publisher on topic["
+    gzerr << "Unable to create publisher on topic["
       << this->Topic() << "].\n";
     return false;
   }
 
-  igndbg << "Camera images for [" << this->Name() << "] advertised on ["
+  gzdbg << "Camera images for [" << this->Name() << "] advertised on ["
          << this->Topic() << "]" << std::endl;
 
   if (_sdf.CameraSensor()->Triggered())
@@ -312,19 +466,20 @@ bool CameraSensor::Load(const sdf::Sensor &_sdf)
     else
     {
       this->dataPtr->triggerTopic =
-          transport::TopicUtils::AsValidTopic(this->dataPtr->triggerTopic);
+          transport::TopicUtils::AsValidTopic(
+          this->Topic() + "/trigger");
 
       if (this->dataPtr->triggerTopic.empty())
       {
-        ignerr << "Invalid trigger topic name" << std::endl;
+        gzerr << "Invalid trigger topic name" << std::endl;
         return false;
       }
     }
 
     this->dataPtr->node.Subscribe(this->dataPtr->triggerTopic,
-        &CameraSensorPrivate::OnTrigger, this->dataPtr.get());
+        &CameraSensor::OnTrigger, this);
 
-    igndbg << "Camera trigger messages for [" << this->Name() << "] subscribed"
+    gzdbg << "Camera trigger messages for [" << this->Name() << "] subscribed"
            << " on [" << this->dataPtr->triggerTopic << "]" << std::endl;
     this->dataPtr->isTriggeredCamera = true;
   }
@@ -352,14 +507,14 @@ bool CameraSensor::Load(sdf::ElementPtr _sdf)
 }
 
 /////////////////////////////////////////////////
-ignition::common::ConnectionPtr CameraSensor::ConnectImageCallback(
-    std::function<void(const ignition::msgs::Image &)> _callback)
+gz::common::ConnectionPtr CameraSensor::ConnectImageCallback(
+    std::function<void(const gz::msgs::Image &)> _callback)
 {
   return this->dataPtr->imageEvent.Connect(_callback);
 }
 
 /////////////////////////////////////////////////
-void CameraSensor::SetScene(ignition::rendering::ScenePtr _scene)
+void CameraSensor::SetScene(gz::rendering::ScenePtr _scene)
 {
   std::lock_guard<std::mutex> lock(this->dataPtr->mutex);
   // APIs make it possible for the scene pointer to change
@@ -376,16 +531,16 @@ void CameraSensor::SetScene(ignition::rendering::ScenePtr _scene)
 //////////////////////////////////////////////////
 bool CameraSensor::Update(const std::chrono::steady_clock::duration &_now)
 {
-  IGN_PROFILE("CameraSensor::Update");
+  GZ_PROFILE("CameraSensor::Update");
   if (!this->dataPtr->initialized)
   {
-    ignerr << "Not initialized, update ignored.\n";
+    gzerr << "Not initialized, update ignored.\n";
     return false;
   }
 
   if (!this->dataPtr->camera)
   {
-    ignerr << "Camera doesn't exist.\n";
+    gzerr << "Camera doesn't exist.\n";
     return false;
   }
 
@@ -393,6 +548,12 @@ bool CameraSensor::Update(const std::chrono::steady_clock::duration &_now)
 
   // move the camera to the current pose
   this->dataPtr->camera->SetLocalPose(this->Pose());
+
+  if (this->HasInfoConnections())
+  {
+    // publish the camera info message
+    this->PublishInfo(_now);
+  }
 
   // render only if necessary
   if (this->dataPtr->isTriggeredCamera &&
@@ -407,7 +568,7 @@ bool CameraSensor::Update(const std::chrono::steady_clock::duration &_now)
   {
     if (this->dataPtr->generatingData)
     {
-      igndbg << "Disabling camera sensor: '" << this->Name() << "' data "
+      gzdbg << "Disabling camera sensor: '" << this->Name() << "' data "
              << "generation. " << std::endl;;
       this->dataPtr->generatingData = false;
     }
@@ -418,91 +579,107 @@ bool CameraSensor::Update(const std::chrono::steady_clock::duration &_now)
   {
     if (!this->dataPtr->generatingData)
     {
-      igndbg << "Enabling camera sensor: '" << this->Name() << "' data "
+      gzdbg << "Enabling camera sensor: '" << this->Name() << "' data "
              << "generation." << std::endl;;
       this->dataPtr->generatingData = true;
     }
   }
 
-  // generate sensor data
-  this->Render();
+  if (this->HasImageConnections() || this->dataPtr->saveImage)
   {
-    IGN_PROFILE("CameraSensor::Update Copy image");
-    this->dataPtr->camera->Copy(this->dataPtr->image);
-  }
-
-  unsigned int width = this->dataPtr->camera->ImageWidth();
-  unsigned int height = this->dataPtr->camera->ImageHeight();
-  unsigned char *data = this->dataPtr->image.Data<unsigned char>();
-
-  ignition::common::Image::PixelFormatType
-      format{common::Image::UNKNOWN_PIXEL_FORMAT};
-  msgs::PixelFormatType msgsPixelFormat =
-    msgs::PixelFormatType::UNKNOWN_PIXEL_FORMAT;
-
-  switch (this->dataPtr->camera->ImageFormat())
-  {
-    case ignition::rendering::PF_R8G8B8:
-      format = ignition::common::Image::RGB_INT8;
-      msgsPixelFormat = msgs::PixelFormatType::RGB_INT8;
-      break;
-    case ignition::rendering::PF_L8:
-      format = ignition::common::Image::L_INT8;
-      msgsPixelFormat = msgs::PixelFormatType::L_INT8;
-      break;
-    case ignition::rendering::PF_L16:
-      format = ignition::common::Image::L_INT16;
-      msgsPixelFormat = msgs::PixelFormatType::L_INT16;
-      break;
-    default:
-      ignerr << "Unsupported pixel format ["
-        << this->dataPtr->camera->ImageFormat() << "]\n";
-      break;
-  }
-
-  // create message
-  ignition::msgs::Image msg;
-  {
-    IGN_PROFILE("CameraSensor::Update Message");
-    msg.set_width(width);
-    msg.set_height(height);
-    msg.set_step(width * rendering::PixelUtil::BytesPerPixel(
-                 this->dataPtr->camera->ImageFormat()));
-    msg.set_pixel_format_type(msgsPixelFormat);
-    *msg.mutable_header()->mutable_stamp() = msgs::Convert(_now);
-    auto frame = msg.mutable_header()->add_data();
-    frame->set_key("frame_id");
-    frame->add_value(this->dataPtr->opticalFrameId);
-    msg.set_data(data, this->dataPtr->camera->ImageMemorySize());
-  }
-
-  // publish the image message
-  {
-    this->AddSequence(msg.mutable_header());
-    IGN_PROFILE("CameraSensor::Update Publish");
-    this->dataPtr->pub.Publish(msg);
-
-    // publish the camera info message
-    this->PublishInfo(_now);
-  }
-
-  // Trigger callbacks.
-  if (this->dataPtr->imageEvent.ConnectionCount() > 0)
-  {
-    try
+    // generate sensor data
+    this->Render();
     {
-      this->dataPtr->imageEvent(msg);
+      GZ_PROFILE("CameraSensor::Update Copy image");
+      this->dataPtr->camera->Copy(this->dataPtr->image);
     }
-    catch(...)
-    {
-      ignerr << "Exception thrown in an image callback.\n";
-    }
-  }
 
-  // Save image
-  if (this->dataPtr->saveImage)
-  {
-    this->dataPtr->SaveImage(data, width, height, format);
+    unsigned int width = this->dataPtr->camera->ImageWidth();
+    unsigned int height = this->dataPtr->camera->ImageHeight();
+    unsigned char *data = this->dataPtr->image.Data<unsigned char>();
+
+    gz::common::Image::PixelFormatType
+        format{common::Image::UNKNOWN_PIXEL_FORMAT};
+    msgs::PixelFormatType msgsPixelFormat =
+      msgs::PixelFormatType::UNKNOWN_PIXEL_FORMAT;
+
+    switch (this->dataPtr->camera->ImageFormat())
+    {
+      case rendering::PF_R8G8B8:
+        format = common::Image::RGB_INT8;
+        msgsPixelFormat = msgs::PixelFormatType::RGB_INT8;
+        break;
+      case rendering::PF_L8:
+        format = common::Image::L_INT8;
+        msgsPixelFormat = msgs::PixelFormatType::L_INT8;
+        break;
+      case rendering::PF_L16:
+        format = common::Image::L_INT16;
+        msgsPixelFormat = msgs::PixelFormatType::L_INT16;
+        break;
+      case rendering::PF_BAYER_RGGB8:
+        format = common::Image::BAYER_RGGB8;
+        msgsPixelFormat = msgs::PixelFormatType::BAYER_RGGB8;
+        break;
+      case rendering::PF_BAYER_BGGR8:
+        format = common::Image::BAYER_BGGR8;
+        msgsPixelFormat = msgs::PixelFormatType::BAYER_BGGR8;
+        break;
+      case rendering::PF_BAYER_GBRG8:
+        format = common::Image::BAYER_GBRG8;
+        msgsPixelFormat = msgs::PixelFormatType::BAYER_GBRG8;
+        break;
+      case rendering::PF_BAYER_GRBG8:
+        format = common::Image::BAYER_GRBG8;
+        msgsPixelFormat = msgs::PixelFormatType::BAYER_GRBG8;
+        break;
+      default:
+        gzerr << "Unsupported pixel format ["
+          << this->dataPtr->camera->ImageFormat() << "]\n";
+        break;
+    }
+
+    // create message
+    msgs::Image msg;
+    {
+      GZ_PROFILE("CameraSensor::Update Message");
+      msg.set_width(width);
+      msg.set_height(height);
+      msg.set_step(width * rendering::PixelUtil::BytesPerPixel(
+                   this->dataPtr->camera->ImageFormat()));
+      msg.set_pixel_format_type(msgsPixelFormat);
+      *msg.mutable_header()->mutable_stamp() = msgs::Convert(_now);
+      auto frame = msg.mutable_header()->add_data();
+      frame->set_key("frame_id");
+      frame->add_value(this->dataPtr->opticalFrameId);
+      msg.set_data(data, this->dataPtr->camera->ImageMemorySize());
+    }
+
+    // publish the image message
+    {
+      this->AddSequence(msg.mutable_header());
+      GZ_PROFILE("CameraSensor::Update Publish");
+      this->dataPtr->pub.Publish(msg);
+    }
+
+    // Trigger callbacks.
+    if (this->dataPtr->imageEvent.ConnectionCount() > 0)
+    {
+      try
+      {
+        this->dataPtr->imageEvent(msg);
+      }
+      catch(...)
+      {
+        ignerr << "Exception thrown in an image callback.\n";
+      }
+    }
+
+    // Save image
+    if (this->dataPtr->saveImage)
+    {
+      this->dataPtr->SaveImage(data, width, height, format);
+    }
   }
 
   if (this->dataPtr->isTriggeredCamera)
@@ -514,21 +691,21 @@ bool CameraSensor::Update(const std::chrono::steady_clock::duration &_now)
 }
 
 //////////////////////////////////////////////////
-void CameraSensorPrivate::OnTrigger(const ignition::msgs::Boolean &/*_msg*/)
+void CameraSensor::OnTrigger(const gz::msgs::Boolean &/*_msg*/)
 {
-  std::lock_guard<std::mutex> lock(this->mutex);
-  this->isTriggered = true;
+  std::lock_guard<std::mutex> lock(this->dataPtr->mutex);
+  this->dataPtr->isTriggered = true;
 }
 
 //////////////////////////////////////////////////
 bool CameraSensorPrivate::SaveImage(const unsigned char *_data,
     unsigned int _width, unsigned int _height,
-    ignition::common::Image::PixelFormatType _format)
+    gz::common::Image::PixelFormatType _format)
 {
   // Attempt to create the directory if it doesn't exist
-  if (!ignition::common::isDirectory(this->saveImagePath))
+  if (!gz::common::isDirectory(this->saveImagePath))
   {
-    if (!ignition::common::createDirectories(this->saveImagePath))
+    if (!gz::common::createDirectories(this->saveImagePath))
       return false;
   }
 
@@ -536,11 +713,11 @@ bool CameraSensorPrivate::SaveImage(const unsigned char *_data,
                          std::to_string(this->saveImageCounter) + ".png";
   ++this->saveImageCounter;
 
-  ignition::common::Image localImage;
+  gz::common::Image localImage;
   localImage.SetFromData(_data, _width, _height, _format);
 
   localImage.SavePNG(
-      ignition::common::joinPaths(this->saveImagePath, filename));
+      gz::common::joinPaths(this->saveImagePath, filename));
   return true;
 }
 
@@ -575,17 +752,17 @@ std::string CameraSensor::InfoTopic() const
 //////////////////////////////////////////////////
 bool CameraSensor::AdvertiseInfo()
 {
-  // TODO(anyone) Make info topic configurable from SDF
-  // Info topic must be at same level as image topic
-  auto parts = common::Split(this->Topic(), '/');
-  parts.pop_back();
-
-  for (const auto &part : parts)
+  if (this->dataPtr->infoTopic.empty())
   {
-    if (!part.empty())
-      this->dataPtr->infoTopic += "/" + part;
+    auto parts = common::Split(this->Topic(), '/');
+    parts.pop_back();
+    for (const auto &part : parts)
+    {
+      if (!part.empty())
+        this->dataPtr->infoTopic += "/" + part;
+    }
+    this->dataPtr->infoTopic += "/camera_info";
   }
-  this->dataPtr->infoTopic += "/camera_info";
 
   return this->AdvertiseInfo(this->dataPtr->infoTopic);
 }
@@ -596,16 +773,16 @@ bool CameraSensor::AdvertiseInfo(const std::string &_topic)
   this->dataPtr->infoTopic = _topic;
 
   this->dataPtr->infoPub =
-      this->dataPtr->node.Advertise<ignition::msgs::CameraInfo>(
+      this->dataPtr->node.Advertise<gz::msgs::CameraInfo>(
       this->dataPtr->infoTopic);
   if (!this->dataPtr->infoPub)
   {
-    ignerr << "Unable to create publisher on topic ["
+    gzerr << "Unable to create publisher on topic ["
       << this->dataPtr->infoTopic << "].\n";
   }
   else
   {
-    igndbg << "Camera info for [" << this->Name() << "] advertised on ["
+    gzdbg << "Camera info for [" << this->Name() << "] advertised on ["
            << this->dataPtr->infoTopic << "]" << std::endl;
   }
 
@@ -652,19 +829,18 @@ void CameraSensor::PopulateInfo(const sdf::Camera *_cameraSdf)
   intrinsics->add_k(0.0);
   intrinsics->add_k(1.0);
 
-  // TODO(anyone) Get tx and ty from SDF
   msgs::CameraInfo::Projection *proj =
     this->dataPtr->infoMsg.mutable_projection();
 
-  proj->add_p(_cameraSdf->LensIntrinsicsFx());
+  proj->add_p(_cameraSdf->LensProjectionFx());
   proj->add_p(0.0);
-  proj->add_p(_cameraSdf->LensIntrinsicsCx());
-  proj->add_p(-_cameraSdf->LensIntrinsicsFx() * this->dataPtr->baseline);
+  proj->add_p(_cameraSdf->LensProjectionCx());
+  proj->add_p(_cameraSdf->LensProjectionTx());
 
   proj->add_p(0.0);
-  proj->add_p(_cameraSdf->LensIntrinsicsFy());
-  proj->add_p(_cameraSdf->LensIntrinsicsCy());
-  proj->add_p(0.0);
+  proj->add_p(_cameraSdf->LensProjectionFy());
+  proj->add_p(_cameraSdf->LensProjectionCy());
+  proj->add_p(_cameraSdf->LensProjectionTy());
 
   proj->add_p(0.0);
   proj->add_p(0.0);
@@ -728,6 +904,89 @@ double CameraSensor::Baseline() const
 //////////////////////////////////////////////////
 bool CameraSensor::HasConnections() const
 {
+  return this->HasImageConnections() || this->HasInfoConnections();
+}
+
+//////////////////////////////////////////////////
+bool CameraSensor::HasImageConnections() const
+{
   return (this->dataPtr->pub && this->dataPtr->pub.HasConnections()) ||
-      this->dataPtr->imageEvent.ConnectionCount() > 0u;
+         this->dataPtr->imageEvent.ConnectionCount() > 0u;
+}
+
+//////////////////////////////////////////////////
+bool CameraSensor::HasInfoConnections() const
+{
+  return this->dataPtr->infoPub && this->dataPtr->infoPub.HasConnections();
+}
+
+//////////////////////////////////////////////////
+math::Matrix4d CameraSensorPrivate::BuildProjectionMatrix(
+    double _imageWidth, double _imageHeight,
+    double _intrinsicsFx, double _intrinsicsFy,
+    double _intrinsicsCx, double _intrinsicsCy,
+    double _intrinsicsS,
+    double _clipNear, double _clipFar)
+{
+  return CameraSensorPrivate::BuildNDCMatrix(
+           0, _imageWidth, 0, _imageHeight, _clipNear, _clipFar) *
+           CameraSensorPrivate::BuildPerspectiveMatrix(
+             _intrinsicsFx, _intrinsicsFy,
+             _intrinsicsCx, _imageHeight - _intrinsicsCy,
+             _intrinsicsS, _clipNear, _clipFar);
+}
+
+//////////////////////////////////////////////////
+math::Matrix4d CameraSensorPrivate::BuildNDCMatrix(
+    double _left, double _right,
+    double _bottom, double _top,
+    double _near, double _far)
+{
+  double inverseWidth = 1.0 / (_right - _left);
+  double inverseHeight = 1.0 / (_top - _bottom);
+  double inverseDistance = 1.0 / (_far - _near);
+
+  return math::Matrix4d(
+           2.0 * inverseWidth,
+           0.0,
+           0.0,
+           -(_right + _left) * inverseWidth,
+           0.0,
+           2.0 * inverseHeight,
+           0.0,
+           -(_top + _bottom) * inverseHeight,
+           0.0,
+           0.0,
+           -2.0 * inverseDistance,
+           -(_far + _near) * inverseDistance,
+           0.0,
+           0.0,
+           0.0,
+           1.0);
+}
+
+//////////////////////////////////////////////////
+math::Matrix4d CameraSensorPrivate::BuildPerspectiveMatrix(
+    double _intrinsicsFx, double _intrinsicsFy,
+    double _intrinsicsCx, double _intrinsicsCy,
+    double _intrinsicsS,
+    double _clipNear, double _clipFar)
+{
+  return math::Matrix4d(
+           _intrinsicsFx,
+           _intrinsicsS,
+           -_intrinsicsCx,
+           0.0,
+           0.0,
+           _intrinsicsFy,
+           -_intrinsicsCy,
+           0.0,
+           0.0,
+           0.0,
+           _clipNear + _clipFar,
+           _clipNear * _clipFar,
+           0.0,
+           0.0,
+           -1.0,
+           0.0);
 }

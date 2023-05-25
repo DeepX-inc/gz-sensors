@@ -14,29 +14,27 @@
  * limitations under the License.
  *
 */
+#if defined(_MSC_VER)
+  #pragma warning(push)
+  #pragma warning(disable: 4005)
+  #pragma warning(disable: 4251)
+#endif
+#include <gz/msgs/performance_sensor_metrics.pb.h>
+#if defined(_MSC_VER)
+  #pragma warning(pop)
+#endif
 
 #include <atomic>
 #include <memory>
 
 #include <gtest/gtest.h>
 
-#ifdef _WIN32
-#pragma warning(push)
-#pragma warning(disable: 4005)
-#pragma warning(disable: 4251)
-#endif
-#include <ignition/msgs/performance_sensor_metrics.pb.h>
-#ifdef _WIN32
-#pragma warning(pop)
-#endif
+#include <gz/common/Console.hh>
+#include <gz/sensors/Export.hh>
+#include <gz/sensors/Sensor.hh>
+#include <gz/transport/Node.hh>
 
-#include <ignition/common/Console.hh>
-#include <ignition/common/Time.hh>
-#include <ignition/sensors/Export.hh>
-#include <ignition/sensors/Sensor.hh>
-#include <ignition/transport/Node.hh>
-
-using namespace ignition;
+using namespace gz;
 using namespace sensors;
 
 class TestSensor : public Sensor
@@ -56,7 +54,7 @@ class Sensor_TEST : public ::testing::Test
   // Documentation inherited
   protected: void SetUp() override
   {
-    ignition::common::Console::SetVerbosity(4);
+    common::Console::SetVerbosity(4);
   }
 };
 
@@ -102,7 +100,7 @@ TEST(Sensor_TEST, Sensor)
 TEST(Sensor_TEST, AddSequence)
 {
   TestSensor sensor;
-  ignition::msgs::Header header;
+  msgs::Header header;
   sensor.AddSequence(&header);
   EXPECT_EQ("seq", header.data(0).key());
   EXPECT_EQ("0", header.data(0).value(0));
@@ -121,7 +119,7 @@ TEST(Sensor_TEST, AddSequence)
   EXPECT_EQ("101", header.data(0).value(0));
 
   // Add another sequence for this sensor.
-  ignition::msgs::Header header2;
+  msgs::Header header2;
   sensor.AddSequence(&header2, "other");
   // The original header shouldn't change
   EXPECT_EQ(1, header.data_size());
@@ -153,14 +151,14 @@ class SensorUpdate : public ::testing::Test
   // Documentation inherited
   protected: void SetUp() override
   {
-    ignition::common::Console::SetVerbosity(4);
+    common::Console::SetVerbosity(4);
     node.Subscribe(kPerformanceMetricTopic,
       &SensorUpdate::OnPerformanceMetric, this);
   }
 
   // Callback function for the performance metric topic.
   protected: void OnPerformanceMetric(
-    const ignition::msgs::PerformanceSensorMetrics &_msg)
+    const msgs::PerformanceSensorMetrics &_msg)
   {
     EXPECT_EQ(kSensorName, _msg.name());
     performanceMetricsMsgsCount++;
@@ -247,7 +245,7 @@ TEST(Sensor_TEST, SetRateService)
   EXPECT_EQ("test_topic", sensor.Topic());
   EXPECT_FLOAT_EQ(10.0, sensor.UpdateRate());
 
-  ignition::transport::Node node;
+  transport::Node node;
 
   std::vector<std::string> services;
   node.ServiceList(services);
@@ -257,13 +255,13 @@ TEST(Sensor_TEST, SetRateService)
     std::find(services.begin(), services.end(), "/test_topic/set_rate");
   ASSERT_NE(services.end(), serviceIt);
 
-  std::vector<ignition::transport::ServicePublisher> publishers;
+  std::vector<transport::ServicePublisher> publishers;
   ASSERT_TRUE(node.ServiceInfo("/test_topic/set_rate", publishers));
 
   ASSERT_LT(0u, publishers.size());
 
-  ignition::msgs::Double msg;
-  ignition::msgs::Empty rep;
+  msgs::Double msg;
+  msgs::Empty rep;
   bool res;
 
   // can set value lower than in SDF
@@ -320,10 +318,10 @@ TEST(Sensor_TEST, SetRateZeroService)
   EXPECT_EQ("test_topic2", sensor.Topic());
   EXPECT_FLOAT_EQ(0.0, sensor.UpdateRate());
 
-  ignition::transport::Node node;
+  transport::Node node;
 
-  ignition::msgs::Double msg;
-  ignition::msgs::Empty rep;
+  msgs::Double msg;
+  msgs::Empty rep;
   bool res;
 
   // can set any value if SDF has 0
@@ -351,10 +349,67 @@ TEST(Sensor_TEST, SetRateZeroService)
   EXPECT_FLOAT_EQ(20.0, sensor.UpdateRate());
 }
 
-
 //////////////////////////////////////////////////
-int main(int argc, char **argv)
+TEST_F(SensorUpdate, NextDataUpdateTime)
 {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  // Create sensor.
+  sdf::Sensor sdfSensor;
+  sdfSensor.SetName(kSensorName);
+  sdfSensor.SetTopic(kSensorTopic);
+  sdfSensor.SetUpdateRate(1);
+
+  std::unique_ptr<Sensor> sensor = std::make_unique<TestSensor>();
+  sensor->Load(sdfSensor);
+
+  {
+    std::chrono::steady_clock::duration now = std::chrono::seconds(0);
+    std::chrono::steady_clock::duration next = std::chrono::seconds(1);
+    EXPECT_TRUE(sensor->Update(now, false));
+    EXPECT_EQ(next.count(), sensor->NextDataUpdateTime().count());
+  }
+
+  {
+    std::chrono::steady_clock::duration now = std::chrono::seconds(1);
+    std::chrono::steady_clock::duration next = std::chrono::seconds(2);
+    EXPECT_TRUE(sensor->Update(now, false));
+    EXPECT_EQ(next.count(), sensor->NextDataUpdateTime().count());
+  }
+
+  {
+    // set the next data update time into the future, so we no longer
+    // expect an update to happen
+    std::chrono::steady_clock::duration now = std::chrono::seconds(2);
+    std::chrono::steady_clock::duration next = std::chrono::seconds(5);
+    sensor->SetNextDataUpdateTime(next);
+    EXPECT_FALSE(sensor->Update(now, false));
+    EXPECT_EQ(next.count(), sensor->NextDataUpdateTime().count());
+  }
+
+  {
+    // Force has no impact  on the next update time
+    std::chrono::steady_clock::duration now = std::chrono::seconds(3);
+    std::chrono::steady_clock::duration next = std::chrono::seconds(5);
+    EXPECT_TRUE(sensor->Update(now, true));
+    EXPECT_EQ(next.count(), sensor->NextDataUpdateTime().count());
+  }
+
+  {
+    // When that time point is reached, the update happens
+    std::chrono::steady_clock::duration now = std::chrono::seconds(5);
+    std::chrono::steady_clock::duration next = std::chrono::seconds(6);
+    EXPECT_TRUE(sensor->Update(now, false));
+    EXPECT_EQ(next.count(), sensor->NextDataUpdateTime().count());
+  }
+
+  {
+    // Jump backwards in time
+    std::chrono::steady_clock::duration now = std::chrono::seconds(5);
+    std::chrono::steady_clock::duration next = std::chrono::seconds(1);
+    sensor->SetNextDataUpdateTime(next);
+    EXPECT_TRUE(sensor->Update(now, false));
+
+    // The next update should be the first dt past the current time
+    std::chrono::steady_clock::duration newNext = std::chrono::seconds(6);
+    EXPECT_EQ(newNext.count(), sensor->NextDataUpdateTime().count());
+  }
 }

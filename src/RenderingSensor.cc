@@ -15,26 +15,17 @@
  *
 */
 
-#include <ignition/common/Profiler.hh>
+#include <gz/common/Profiler.hh>
 
-// TODO(louise) Remove these pragmas once ign-rendering is disabling the
-// warnings
-#ifdef _WIN32
-#pragma warning(push)
-#pragma warning(disable: 4251)
-#endif
-#include <ignition/rendering/Camera.hh>
-#ifdef _WIN32
-#pragma warning(pop)
-#endif
+#include <gz/rendering/Camera.hh>
 
-#include "ignition/sensors/RenderingSensor.hh"
+#include "gz/sensors/RenderingSensor.hh"
 
 /// \brief Private data class for RenderingSensor
-class ignition::sensors::RenderingSensorPrivate
+class gz::sensors::RenderingSensorPrivate
 {
   /// \brief Pointer to the scene
-  public: ignition::rendering::ScenePtr scene;
+  public: gz::rendering::ScenePtr scene;
 
   /// \brief Manually update the rendering scene graph
   public: bool manualSceneUpdate = false;
@@ -44,7 +35,7 @@ class ignition::sensors::RenderingSensorPrivate
   public: std::vector<rendering::SensorPtr::weak_type> sensors;
 };
 
-using namespace ignition;
+using namespace gz;
 using namespace sensors;
 
 //////////////////////////////////////////////////
@@ -56,7 +47,7 @@ RenderingSensor::RenderingSensor() :
 //////////////////////////////////////////////////
 RenderingSensor::~RenderingSensor()
 {
-  if (!this->dataPtr->scene)
+  if (!this->dataPtr->scene || !this->dataPtr->scene->IsInitialized())
     return;
   for (auto &s : this->dataPtr->sensors)
   {
@@ -100,7 +91,7 @@ bool RenderingSensor::ManualSceneUpdate() const
 /////////////////////////////////////////////////
 void RenderingSensor::Render()
 {
-  IGN_PROFILE("RenderingSensor::Render");
+  GZ_PROFILE("RenderingSensor::Render");
   // Skip scene update. The user indicated that they will do this manually.
   // Performance is improved when a global scene update occurs only once per
   // frame, which can be acheived using a manual scene update.

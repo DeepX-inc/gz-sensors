@@ -14,43 +14,42 @@
  * limitations under the License.
  *
 */
-
-#ifdef _WIN32
-#pragma warning(push)
-#pragma warning(disable: 4005)
-#pragma warning(disable: 4251)
+#if defined(_MSC_VER)
+  #pragma warning(push)
+  #pragma warning(disable: 4005)
+  #pragma warning(disable: 4251)
 #endif
-#include <ignition/msgs/pointcloud_packed.pb.h>
-#ifdef _WIN32
-#pragma warning(pop)
+#include <gz/msgs/pointcloud_packed.pb.h>
+#if defined(_MSC_VER)
+  #pragma warning(pop)
 #endif
 
-#include <ignition/common/Console.hh>
-#include <ignition/common/Profiler.hh>
-#include <ignition/msgs/Utility.hh>
-#include <ignition/transport/Node.hh>
+#include <gz/common/Console.hh>
+#include <gz/common/Profiler.hh>
+#include <gz/msgs/Utility.hh>
+#include <gz/transport/Node.hh>
 
-#include "ignition/sensors/GpuLidarSensor.hh"
-#include "ignition/sensors/SensorFactory.hh"
+#include "gz/sensors/GpuLidarSensor.hh"
+#include "gz/sensors/SensorFactory.hh"
 
-using namespace ignition::sensors;
+using namespace gz::sensors;
 
 /// \brief Private data for the GpuLidar class
-class ignition::sensors::GpuLidarSensorPrivate
+class gz::sensors::GpuLidarSensorPrivate
 {
   /// \brief Fill the point cloud packed message
   /// \param[in] _laserBuffer Lidar data buffer.
   public: void FillPointCloudMsg(const float *_laserBuffer);
 
   /// \brief Rendering camera
-  public: ignition::rendering::GpuRaysPtr gpuRays;
+  public: gz::rendering::GpuRaysPtr gpuRays;
 
   /// \brief Connection to the Manager's scene change event.
-  public: ignition::common::ConnectionPtr sceneChangeConnection;
+  public: gz::common::ConnectionPtr sceneChangeConnection;
 
   /// \brief Event that is used to trigger callbacks when a new
   /// lidar frame is available
-  public: ignition::common::EventT<
+  public: gz::common::EventT<
           void(const float *_scan, unsigned int _width,
                unsigned int _height, unsigned int _channels,
                const std::string &_format)> lidarEvent;
@@ -61,7 +60,7 @@ class ignition::sensors::GpuLidarSensorPrivate
                const std::string &_format);
 
   /// \brief Connection to gpuRays new lidar frame event
-  public: ignition::common::ConnectionPtr lidarFrameConnection;
+  public: gz::common::ConnectionPtr lidarFrameConnection;
 
   /// \brief The point cloud message.
   public: msgs::PointCloudPacked pointMsg;
@@ -97,7 +96,7 @@ GpuLidarSensor::~GpuLidarSensor()
 }
 
 /////////////////////////////////////////////////
-void GpuLidarSensor::SetScene(ignition::rendering::ScenePtr _scene)
+void GpuLidarSensor::SetScene(gz::rendering::ScenePtr _scene)
 {
   std::lock_guard<std::mutex> lock(this->lidarMutex);
   // APIs make it possible for the scene pointer to change
@@ -113,7 +112,7 @@ void GpuLidarSensor::SetScene(ignition::rendering::ScenePtr _scene)
 
 //////////////////////////////////////////////////
 void GpuLidarSensor::RemoveGpuRays(
-    ignition::rendering::ScenePtr _scene)
+    gz::rendering::ScenePtr _scene)
 {
   if (_scene)
   {
@@ -175,17 +174,17 @@ bool GpuLidarSensor::Load(const sdf::Sensor &_sdf)
   this->SetTopic(this->Topic() + "/points");
 
   this->dataPtr->pointPub =
-      this->dataPtr->node.Advertise<ignition::msgs::PointCloudPacked>(
+      this->dataPtr->node.Advertise<gz::msgs::PointCloudPacked>(
           this->Topic());
 
   if (!this->dataPtr->pointPub)
   {
-    ignerr << "Unable to create publisher on topic["
+    gzerr << "Unable to create publisher on topic["
       << this->Topic() << "].\n";
     return false;
   }
 
-  igndbg << "Lidar points for [" << this->Name() << "] advertised on ["
+  gzdbg << "Lidar points for [" << this->Name() << "] advertised on ["
          << this->Topic() << "]" << std::endl;
 
   this->initialized = true;
@@ -215,7 +214,7 @@ bool GpuLidarSensor::CreateLidar()
 
   if (!this->dataPtr->gpuRays)
   {
-    ignerr << "Unable to create gpu laser sensor\n";
+    gzerr << "Unable to create gpu laser sensor\n";
     return false;
   }
 
@@ -289,16 +288,16 @@ void GpuLidarSensor::OnNewLidarFrame(const float *_data,
 //////////////////////////////////////////////////
 bool GpuLidarSensor::Update(const std::chrono::steady_clock::duration &_now)
 {
-  IGN_PROFILE("GpuLidarSensor::Update");
+  GZ_PROFILE("GpuLidarSensor::Update");
   if (!this->initialized)
   {
-    ignerr << "Not initialized, update ignored.\n";
+    gzerr << "Not initialized, update ignored.\n";
     return false;
   }
 
   if (!this->dataPtr->gpuRays)
   {
-    ignerr << "GpuRays doesn't exist.\n";
+    gzerr << "GpuRays doesn't exist.\n";
     return false;
   }
 
@@ -332,7 +331,7 @@ bool GpuLidarSensor::Update(const std::chrono::steady_clock::duration &_now)
 
     {
       this->AddSequence(this->dataPtr->pointMsg.mutable_header());
-      IGN_PROFILE("GpuLidarSensor::Update Publish point cloud");
+      GZ_PROFILE("GpuLidarSensor::Update Publish point cloud");
       this->dataPtr->pointPub.Publish(this->dataPtr->pointMsg);
     }
   }
@@ -340,7 +339,7 @@ bool GpuLidarSensor::Update(const std::chrono::steady_clock::duration &_now)
 }
 
 /////////////////////////////////////////////////
-ignition::common::ConnectionPtr GpuLidarSensor::ConnectNewLidarFrame(
+gz::common::ConnectionPtr GpuLidarSensor::ConnectNewLidarFrame(
           std::function<void(const float *_scan, unsigned int _width,
                   unsigned int _height, unsigned int _channels,
                   const std::string &/*_format*/)> _subscriber)
@@ -349,7 +348,7 @@ ignition::common::ConnectionPtr GpuLidarSensor::ConnectNewLidarFrame(
 }
 
 /////////////////////////////////////////////////
-ignition::rendering::GpuRaysPtr GpuLidarSensor::GpuRays() const
+gz::rendering::GpuRaysPtr GpuLidarSensor::GpuRays() const
 {
   return this->dataPtr->gpuRays;
 }
@@ -361,13 +360,13 @@ bool GpuLidarSensor::IsHorizontal() const
 }
 
 //////////////////////////////////////////////////
-ignition::math::Angle GpuLidarSensor::HFOV() const
+gz::math::Angle GpuLidarSensor::HFOV() const
 {
   return this->dataPtr->gpuRays->HFOV();
 }
 
 //////////////////////////////////////////////////
-ignition::math::Angle GpuLidarSensor::VFOV() const
+gz::math::Angle GpuLidarSensor::VFOV() const
 {
   return this->dataPtr->gpuRays->VFOV();
 }
@@ -383,7 +382,7 @@ bool GpuLidarSensor::HasConnections() const
 //////////////////////////////////////////////////
 void GpuLidarSensorPrivate::FillPointCloudMsg(const float *_laserBuffer)
 {
-  IGN_PROFILE("GpuLidarSensorPrivate::FillPointCloudMsg");
+  GZ_PROFILE("GpuLidarSensorPrivate::FillPointCloudMsg");
   uint32_t width = this->pointMsg.width();
   uint32_t height = this->pointMsg.height();
   unsigned int channels = this->gpuRays->Channels();
@@ -408,7 +407,8 @@ void GpuLidarSensorPrivate::FillPointCloudMsg(const float *_laserBuffer)
       float zenith = _laserBuffer[index + 3];
 
       // Validate Depth/Radius and update pointcloud density flag
-      isDense &= !ignition::math::isnan(depth) & !std::isinf(depth);
+      if (isDense)
+        isDense = !(gz::math::isnan(depth) || std::isinf(depth));
 
       uint16_t ring = j;
 

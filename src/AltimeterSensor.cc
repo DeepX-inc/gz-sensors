@@ -15,19 +15,30 @@
  *
 */
 
-#include <ignition/common/Profiler.hh>
-#include <ignition/transport/Node.hh>
+#if defined(_MSC_VER)
+  #pragma warning(push)
+  #pragma warning(disable: 4005)
+  #pragma warning(disable: 4251)
+#endif
+#include <gz/msgs/altimeter.pb.h>
+#if defined(_MSC_VER)
+  #pragma warning(pop)
+#endif
 
-#include "ignition/sensors/AltimeterSensor.hh"
-#include "ignition/sensors/Noise.hh"
-#include "ignition/sensors/SensorFactory.hh"
-#include "ignition/sensors/SensorTypes.hh"
+#include <gz/common/Profiler.hh>
+#include <gz/msgs/Utility.hh>
+#include <gz/transport/Node.hh>
 
-using namespace ignition;
+#include "gz/sensors/AltimeterSensor.hh"
+#include "gz/sensors/Noise.hh"
+#include "gz/sensors/SensorFactory.hh"
+#include "gz/sensors/SensorTypes.hh"
+
+using namespace gz;
 using namespace sensors;
 
 /// \brief Private data for AltimeterSensor
-class ignition::sensors::AltimeterSensorPrivate
+class gz::sensors::AltimeterSensorPrivate
 {
   /// \brief node to create publisher
   public: transport::Node node;
@@ -76,14 +87,14 @@ bool AltimeterSensor::Load(const sdf::Sensor &_sdf)
 
   if (_sdf.Type() != sdf::SensorType::ALTIMETER)
   {
-    ignerr << "Attempting to a load an Altimeter sensor, but received "
+    gzerr << "Attempting to a load an Altimeter sensor, but received "
       << "a " << _sdf.TypeStr() << std::endl;
     return false;
   }
 
   if (_sdf.AltimeterSensor() == nullptr)
   {
-    ignerr << "Attempting to a load an Altimeter sensor, but received "
+    gzerr << "Attempting to a load an Altimeter sensor, but received "
       << "a null sensor." << std::endl;
     return false;
   }
@@ -92,15 +103,15 @@ bool AltimeterSensor::Load(const sdf::Sensor &_sdf)
     this->SetTopic("/altimeter");
 
   this->dataPtr->pub =
-      this->dataPtr->node.Advertise<ignition::msgs::Altimeter>(this->Topic());
+      this->dataPtr->node.Advertise<msgs::Altimeter>(this->Topic());
 
   if (!this->dataPtr->pub)
   {
-    ignerr << "Unable to create publisher on topic[" << this->Topic() << "].\n";
+    gzerr << "Unable to create publisher on topic[" << this->Topic() << "].\n";
     return false;
   }
 
-  igndbg << "Altimeter data for [" << this->Name() << "] advertised on ["
+  gzdbg << "Altimeter data for [" << this->Name() << "] advertised on ["
          << this->Topic() << "]" << std::endl;
 
   // Load the noise parameters
@@ -135,10 +146,10 @@ bool AltimeterSensor::Load(sdf::ElementPtr _sdf)
 //////////////////////////////////////////////////
 bool AltimeterSensor::Update(const std::chrono::steady_clock::duration &_now)
 {
-  IGN_PROFILE("AltimeterSensor::Update");
+  GZ_PROFILE("AltimeterSensor::Update");
   if (!this->dataPtr->initialized)
   {
-    ignerr << "Not initialized, update ignored.\n";
+    gzerr << "Not initialized, update ignored.\n";
     return false;
   }
 

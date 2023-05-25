@@ -17,20 +17,21 @@
 
 #include <mutex>
 
-#include <ignition/common/Console.hh>
-#include <ignition/common/Profiler.hh>
-#include <ignition/math/Frustum.hh>
-#include <ignition/math/Helpers.hh>
-#include <ignition/transport/Node.hh>
+#include <gz/common/Console.hh>
+#include <gz/common/Profiler.hh>
+#include <gz/math/Frustum.hh>
+#include <gz/math/Helpers.hh>
+#include <gz/msgs/Utility.hh>
+#include <gz/transport/Node.hh>
 
-#include "ignition/sensors/SensorFactory.hh"
-#include "ignition/sensors/LogicalCameraSensor.hh"
+#include "gz/sensors/SensorFactory.hh"
+#include "gz/sensors/LogicalCameraSensor.hh"
 
-using namespace ignition;
+using namespace gz;
 using namespace sensors;
 
 /// \brief Private data for LogicalCameraSensor
-class ignition::sensors::LogicalCameraSensorPrivate
+class gz::sensors::LogicalCameraSensorPrivate
 {
   /// \brief node to create publisher
   public: transport::Node node;
@@ -45,7 +46,7 @@ class ignition::sensors::LogicalCameraSensorPrivate
   public: std::mutex mutex;
 
   /// \brief Camera frustum.
-  public: ignition::math::Frustum frustum;
+  public: math::Frustum frustum;
 
   /// \brief Set world pose.
   public: math::Pose3d worldPose;
@@ -54,7 +55,7 @@ class ignition::sensors::LogicalCameraSensorPrivate
   public: std::map<std::string, math::Pose3d> models;
 
   /// \brief Msg containg info on models detected by logical camera
-  ignition::msgs::LogicalCameraImage msg;
+  msgs::LogicalCameraImage msg;
 };
 
 //////////////////////////////////////////////////
@@ -84,8 +85,8 @@ bool LogicalCameraSensor::Load(sdf::ElementPtr _sdf)
   {
     if (!_sdf->HasElement("logical_camera"))
     {
-      ignerr << "<sensor><camera> SDF element not found while attempting to "
-        << "load a ignition::sensors::LogicalCameraSensor\n";
+      gzerr << "<sensor><camera> SDF element not found while attempting to "
+        << "load a LogicalCameraSensor\n";
       return false;
     }
     cameraSdf = _sdf->GetElement("logical_camera");
@@ -106,16 +107,16 @@ bool LogicalCameraSensor::Load(sdf::ElementPtr _sdf)
     this->SetTopic("/logical_camera");
 
   this->dataPtr->pub =
-      this->dataPtr->node.Advertise<ignition::msgs::LogicalCameraImage>(
+      this->dataPtr->node.Advertise<msgs::LogicalCameraImage>(
       this->Topic());
 
   if (!this->dataPtr->pub)
   {
-    ignerr << "Unable to create publisher on topic[" << this->Topic() << "].\n";
+    gzerr << "Unable to create publisher on topic[" << this->Topic() << "].\n";
     return false;
   }
 
-  igndbg << "Logical images for [" << this->Name() << "] advertised on ["
+  gzdbg << "Logical images for [" << this->Name() << "] advertised on ["
          << this->Topic() << "]" << std::endl;
 
   this->dataPtr->initialized = true;
@@ -133,10 +134,10 @@ void LogicalCameraSensor::SetModelPoses(
 bool LogicalCameraSensor::Update(
   const std::chrono::steady_clock::duration &_now)
 {
-  IGN_PROFILE("LogicalCameraSensor::Update");
+  GZ_PROFILE("LogicalCameraSensor::Update");
   if (!this->dataPtr->initialized)
   {
-    ignerr << "Not initialized, update ignored.\n";
+    gzerr << "Not initialized, update ignored.\n";
     return false;
   }
   std::lock_guard<std::mutex> lock(this->dataPtr->mutex);
@@ -155,7 +156,7 @@ bool LogicalCameraSensor::Update(
       msgs::LogicalCameraImage::Model *modelMsg =
           this->dataPtr->msg.add_model();
       modelMsg->set_name(it.first);
-      msgs::Set(modelMsg->mutable_pose(), it.second - this->Pose());
+      msgs::Set(modelMsg->mutable_pose(), this->Pose().Inverse() * it.second);
     }
   }
   *this->dataPtr->msg.mutable_header()->mutable_stamp() = msgs::Convert(_now);
@@ -185,7 +186,7 @@ double LogicalCameraSensor::Far() const
 }
 
 //////////////////////////////////////////////////
-ignition::math::Angle LogicalCameraSensor::HorizontalFOV() const
+math::Angle LogicalCameraSensor::HorizontalFOV() const
 {
   return this->dataPtr->frustum.FOV();
 }

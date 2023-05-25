@@ -9,16 +9,19 @@ set(dri_tests
   segmentation_camera.cc
   thermal_camera.cc
   triggered_camera.cc
+  wide_angle_camera.cc
+  triggered_boundingbox_camera.cc
 )
 
 set(tests
   air_pressure.cc
+  air_speed.cc
   altimeter.cc
   force_torque.cc
+  imu.cc
   logical_camera.cc
   magnetometer.cc
   navsat.cc
-  imu.cc
 )
 
 link_directories(${PROJECT_BINARY_DIR}/test)
@@ -33,32 +36,33 @@ if (UNIX AND NOT APPLE)
 endif()
 
 if (DRI_TESTS)
-  ign_build_tests(TYPE INTEGRATION
+  gz_build_tests(TYPE INTEGRATION
     SOURCES
       ${dri_tests}
     LIB_DEPS
-      ${IGNITION-TRANSPORT_LIBRARIES}
+      ${GZ-TRANSPORT_LIBRARIES}
       ${PROJECT_LIBRARY_TARGET_NAME}-boundingbox_camera
       ${PROJECT_LIBRARY_TARGET_NAME}-depth_camera
       ${PROJECT_LIBRARY_TARGET_NAME}-camera
       ${PROJECT_LIBRARY_TARGET_NAME}-lidar
       ${PROJECT_LIBRARY_TARGET_NAME}-gpu_lidar
       ${PROJECT_LIBRARY_TARGET_NAME}-rgbd_camera
-      ${PROJECT_LIBRARY_TARGET_NAME}-thermal_camera
       ${PROJECT_LIBRARY_TARGET_NAME}-segmentation_camera
+      ${PROJECT_LIBRARY_TARGET_NAME}-thermal_camera
+      ${PROJECT_LIBRARY_TARGET_NAME}-wide_angle_camera
   )
 endif()
 
-ign_build_tests(TYPE INTEGRATION
+gz_build_tests(TYPE INTEGRATION
   SOURCES
     ${tests}
   LIB_DEPS
     ${PROJECT_LIBRARY_TARGET_NAME}-air_pressure
+    ${PROJECT_LIBRARY_TARGET_NAME}-air_speed
     ${PROJECT_LIBRARY_TARGET_NAME}-altimeter
+    ${PROJECT_LIBRARY_TARGET_NAME}-force_torque
+    ${PROJECT_LIBRARY_TARGET_NAME}-imu
     ${PROJECT_LIBRARY_TARGET_NAME}-logical_camera
     ${PROJECT_LIBRARY_TARGET_NAME}-magnetometer
-    ${PROJECT_LIBRARY_TARGET_NAME}-imu
-    ${PROJECT_LIBRARY_TARGET_NAME}-force_torque
     ${PROJECT_LIBRARY_TARGET_NAME}-navsat
 )
-

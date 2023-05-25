@@ -17,26 +17,27 @@
 
 #include <mutex>
 
-#include <ignition/msgs/image.pb.h>
-#include <ignition/msgs/annotated_axis_aligned_2d_box.pb.h>
-#include <ignition/msgs/annotated_oriented_3d_box.pb.h>
+#include <gz/msgs/image.pb.h>
+#include <gz/msgs/annotated_axis_aligned_2d_box.pb.h>
+#include <gz/msgs/annotated_oriented_3d_box.pb.h>
 
-#include <ignition/common/Console.hh>
-#include <ignition/common/Image.hh>
-#include <ignition/common/Profiler.hh>
-#include <ignition/common/Util.hh>
-#include <ignition/rendering/BoundingBoxCamera.hh>
-#include <ignition/transport/Node.hh>
-#include <ignition/transport/Publisher.hh>
+#include <gz/common/Console.hh>
+#include <gz/common/Image.hh>
+#include <gz/common/Profiler.hh>
+#include <gz/common/Util.hh>
+#include <gz/msgs/Utility.hh>
+#include <gz/rendering/BoundingBoxCamera.hh>
+#include <gz/transport/Node.hh>
+#include <gz/transport/Publisher.hh>
 
-#include "ignition/sensors/BoundingBoxCameraSensor.hh"
-#include "ignition/sensors/RenderingEvents.hh"
-#include "ignition/sensors/SensorFactory.hh"
+#include "gz/sensors/BoundingBoxCameraSensor.hh"
+#include "gz/sensors/RenderingEvents.hh"
+#include "gz/sensors/SensorFactory.hh"
 
-using namespace ignition;
+using namespace gz;
 using namespace sensors;
 
-class ignition::sensors::BoundingBoxCameraSensorPrivate
+class gz::sensors::BoundingBoxCameraSensorPrivate
 {
   /// \brief Save an image of rgb camera
   public: void SaveImage();
@@ -83,6 +84,15 @@ class ignition::sensors::BoundingBoxCameraSensorPrivate
 
   /// \brief Just a mutex for thread safety
   public: std::mutex mutex;
+
+  /// \brief True if camera is triggered by a topic
+  public: bool isTriggeredCamera{false};
+
+  /// \brief True if camera has been triggered by a topic
+  public: bool isTriggered{false};
+
+  /// \brief Topic for camera trigger
+  public: std::string triggerTopic{""};
 
   /// \brief BoundingBoxes type
   public: rendering::BoundingBoxType type
@@ -152,7 +162,7 @@ bool BoundingBoxCameraSensor::Load(const sdf::Sensor &_sdf)
       this->dataPtr->type = rendering::BoundingBoxType::BBT_BOX3D;
     else
     {
-      ignerr << "Unknown bounding box type " << type << std::endl;
+      gzerr << "Unknown bounding box type " << type << std::endl;
       return false;
     }
   }
@@ -165,14 +175,14 @@ bool BoundingBoxCameraSensor::Load(const sdf::Sensor &_sdf)
   // Check if this is the right type
   if (_sdf.Type() != sdf::SensorType::BOUNDINGBOX_CAMERA)
   {
-    ignerr << "Attempting to a load a BoundingBox Camera sensor, but received "
+    gzerr << "Attempting to a load a BoundingBox Camera sensor, but received "
       << "a " << _sdf.TypeStr() << std::endl;
     return false;
   }
 
   if (_sdf.CameraSensor() == nullptr)
   {
-    ignerr << "Attempting to a load a BoundingBox Camera sensor, but received "
+    gzerr << "Attempting to a load a BoundingBox Camera sensor, but received "
       << "a null sensor." << std::endl;
     return false;
   }
@@ -187,12 +197,12 @@ bool BoundingBoxCameraSensor::Load(const sdf::Sensor &_sdf)
 
   if (!this->dataPtr->imagePublisher)
   {
-    ignerr << "Unable to create publisher on topic ["
+    gzerr << "Unable to create publisher on topic ["
       << topicImage << "].\n";
     return false;
   }
 
-  igndbg << "Camera images for [" << this->Name() << "] advertised on ["
+  gzdbg << "Camera images for [" << this->Name() << "] advertised on ["
     << topicImage << "]" << std::endl;
 
   if (this->dataPtr->type == rendering::BoundingBoxType::BBT_BOX3D)
@@ -208,13 +218,41 @@ bool BoundingBoxCameraSensor::Load(const sdf::Sensor &_sdf)
 
   if (!this->dataPtr->boxesPublisher)
   {
-    ignerr << "Unable to create publisher on topic ["
+    gzerr << "Unable to create publisher on topic ["
       << topicBoundingBoxes << "].\n";
     return false;
   }
 
-  igndbg << "Bounding boxes for [" << this->Name() << "] advertised on ["
+  gzdbg << "Bounding boxes for [" << this->Name() << "] advertised on ["
     << topicBoundingBoxes << std::endl;
+
+  if (_sdf.CameraSensor()->Triggered())
+  {
+    if (!_sdf.CameraSensor()->TriggerTopic().empty())
+    {
+      this->dataPtr->triggerTopic = _sdf.CameraSensor()->TriggerTopic();
+    }
+    else
+    {
+      this->dataPtr->triggerTopic =
+          transport::TopicUtils::AsValidTopic(
+          this->Topic() + "/trigger");
+
+      if (this->dataPtr->triggerTopic.empty())
+      {
+        gzerr << "Invalid trigger topic name [" <<
+        this->dataPtr->triggerTopic << "]" << std::endl;
+        return false;
+      }
+    }
+
+    this->dataPtr->node.Subscribe(this->dataPtr->triggerTopic,
+        &BoundingBoxCameraSensor::OnTrigger, this);
+
+    gzdbg << "Camera trigger messages for [" << this->Name() << "] subscribed"
+          << " on [" << this->dataPtr->triggerTopic << "]" << std::endl;
+    this->dataPtr->isTriggeredCamera = true;
+  }
 
   if (!this->AdvertiseInfo())
     return false;
@@ -258,7 +296,7 @@ bool BoundingBoxCameraSensor::CreateCamera()
   auto sdfCamera = this->dataPtr->sdfSensor.CameraSensor();
   if (!sdfCamera)
   {
-    ignerr << "Unable to access camera SDF element\n";
+    gzerr << "Unable to access camera SDF element\n";
     return false;
   }
 
@@ -286,9 +324,9 @@ bool BoundingBoxCameraSensor::CreateCamera()
   this->dataPtr->rgbCamera->SetNearClipPlane(sdfCamera->NearClip());
   this->dataPtr->rgbCamera->SetFarClipPlane(sdfCamera->FarClip());
   math::Angle angle = sdfCamera->HorizontalFov();
-  if (angle < 0.01 || angle > IGN_PI*2)
+  if (angle < 0.01 || angle > GZ_PI*2)
   {
-    ignerr << "Invalid horizontal field of view [" << angle << "]\n";
+    gzerr << "Invalid horizontal field of view [" << angle << "]\n";
     return false;
   }
   double aspectRatio = static_cast<double>(width)/height;
@@ -370,17 +408,33 @@ void BoundingBoxCameraSensor::OnNewBoundingBoxes(
 bool BoundingBoxCameraSensor::Update(
   const std::chrono::steady_clock::duration &_now)
 {
-  IGN_PROFILE("BoundingBoxCameraSensor::Update");
+  GZ_PROFILE("BoundingBoxCameraSensor::Update");
   if (!this->dataPtr->initialized)
   {
-    ignerr << "Not initialized, update ignored.\n";
+    gzerr << "Not initialized, update ignored.\n";
     return false;
   }
 
   if (!this->dataPtr->boundingboxCamera || !this->dataPtr->rgbCamera)
   {
-    ignerr << "Camera doesn't exist.\n";
+    gzerr << "Camera doesn't exist.\n";
     return false;
+  }
+
+  if (this->HasInfoConnections())
+  {
+    // publish the camera info message
+    this->PublishInfo(_now);
+  }
+
+  // render only if necessary
+  {
+    std::lock_guard<std::mutex> lock(this->dataPtr->mutex);
+    if (this->dataPtr->isTriggeredCamera &&
+        !this->dataPtr->isTriggered)
+    {
+      return true;
+    }
   }
 
   // don't render if there are no subscribers nor saving
@@ -502,7 +556,6 @@ bool BoundingBoxCameraSensor::Update(
   std::lock_guard<std::mutex> lock(this->dataPtr->mutex);
 
   // Publish
-  this->PublishInfo(_now);
   if (this->dataPtr->type == rendering::BoundingBoxType::BBT_BOX3D)
   {
     this->AddSequence(boxes3DMsg.mutable_header(), "boundingboxes");
@@ -522,6 +575,11 @@ bool BoundingBoxCameraSensor::Update(
     ++this->dataPtr->saveCounter;
   }
 
+  if (this->dataPtr->isTriggeredCamera)
+  {
+    return this->dataPtr->isTriggered = false;
+  }
+
   return true;
 }
 
@@ -538,6 +596,13 @@ unsigned int BoundingBoxCameraSensor::ImageWidth() const
 }
 
 //////////////////////////////////////////////////
+void BoundingBoxCameraSensor::OnTrigger(const gz::msgs::Boolean &/*_msg*/)
+{
+  std::lock_guard<std::mutex> lock(this->dataPtr->mutex);
+  this->dataPtr->isTriggered = true;
+}
+
+//////////////////////////////////////////////////
 void BoundingBoxCameraSensorPrivate::SaveImage()
 {
   // Attempt to create the save directory if it doesn't exist
@@ -545,7 +610,7 @@ void BoundingBoxCameraSensorPrivate::SaveImage()
   {
     if (!common::createDirectories(this->savePath))
     {
-      ignerr << "Failed to create directory [" << this->savePath << "]"
+      gzerr << "Failed to create directory [" << this->savePath << "]"
              << std::endl;
       return;
     }
@@ -555,7 +620,7 @@ void BoundingBoxCameraSensorPrivate::SaveImage()
   {
     if (!common::createDirectories(this->saveImageFolder))
     {
-      ignerr << "Failed to create directory [" << this->saveImageFolder << "]"
+      gzerr << "Failed to create directory [" << this->saveImageFolder << "]"
              << std::endl;
       return;
     }
@@ -590,7 +655,7 @@ void BoundingBoxCameraSensorPrivate::SaveBoxes()
   {
     if (!common::createDirectories(this->savePath))
     {
-      ignerr << "Failed to create directory [" << this->savePath << "]"
+      gzerr << "Failed to create directory [" << this->savePath << "]"
              << std::endl;
       return;
     }
@@ -600,7 +665,7 @@ void BoundingBoxCameraSensorPrivate::SaveBoxes()
   {
     if (!common::createDirectories(this->saveBoxesFolder))
     {
-      ignerr << "Failed to create directory [" << this->saveBoxesFolder << "]"
+      gzerr << "Failed to create directory [" << this->saveBoxesFolder << "]"
              << std::endl;
       return;
     }
@@ -672,5 +737,6 @@ bool BoundingBoxCameraSensor::HasConnections() const
   return (this->dataPtr->imagePublisher &&
       this->dataPtr->imagePublisher.HasConnections()) ||
       (this->dataPtr->boxesPublisher &&
-      this->dataPtr->boxesPublisher.HasConnections());
+      this->dataPtr->boxesPublisher.HasConnections()) ||
+      this->HasInfoConnections();
 }

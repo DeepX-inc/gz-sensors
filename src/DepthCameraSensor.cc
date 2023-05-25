@@ -14,34 +14,29 @@
  * limitations under the License.
  *
 */
-#ifdef _WIN32
-#pragma warning(push)
-#pragma warning(disable: 4005)
-#pragma warning(disable: 4251)
-#endif
-#include <ignition/msgs/pointcloud_packed.pb.h>
-#ifdef _WIN32
-#pragma warning(pop)
-#endif
+
+#include <gz/msgs/image.pb.h>
+#include <gz/msgs/pointcloud_packed.pb.h>
 
 #include <mutex>
 
-#include <ignition/common/Console.hh>
-#include <ignition/common/Image.hh>
-#include <ignition/common/Profiler.hh>
-#include <ignition/common/SystemPaths.hh>
+#include <gz/common/Console.hh>
+#include <gz/common/Image.hh>
+#include <gz/common/Profiler.hh>
+#include <gz/common/SystemPaths.hh>
 
-#include <ignition/math/Angle.hh>
-#include <ignition/math/Helpers.hh>
+#include <gz/math/Angle.hh>
+#include <gz/math/Helpers.hh>
 
-#include <ignition/transport/Node.hh>
+#include <gz/msgs/Utility.hh>
+#include <gz/transport/Node.hh>
 
-#include "ignition/sensors/DepthCameraSensor.hh"
-#include "ignition/sensors/Manager.hh"
-#include "ignition/sensors/SensorFactory.hh"
-#include "ignition/sensors/ImageGaussianNoiseModel.hh"
-#include "ignition/sensors/ImageNoise.hh"
-#include "ignition/sensors/RenderingEvents.hh"
+#include "gz/sensors/DepthCameraSensor.hh"
+#include "gz/sensors/Manager.hh"
+#include "gz/sensors/SensorFactory.hh"
+#include "gz/sensors/ImageGaussianNoiseModel.hh"
+#include "gz/sensors/ImageNoise.hh"
+#include "gz/sensors/RenderingEvents.hh"
 
 #include "PointCloudUtil.hh"
 
@@ -52,7 +47,7 @@
 #endif
 
 /// \brief Private data for DepthCameraSensor
-class ignition::sensors::DepthCameraSensorPrivate
+class gz::sensors::DepthCameraSensorPrivate
 {
   /// \brief Save an image
   /// \param[in] _data the image data to be saved
@@ -64,7 +59,7 @@ class ignition::sensors::DepthCameraSensorPrivate
   /// of the path was not possible.
   /// \sa ImageSaver
   public: bool SaveImage(const float *_data, unsigned int _width,
-    unsigned int _height, ignition::common::Image::PixelFormatType _format);
+    unsigned int _height, gz::common::Image::PixelFormatType _format);
 
   /// \brief Helper function to convert depth data to depth image
   /// \param[in] _data depth data
@@ -84,7 +79,7 @@ class ignition::sensors::DepthCameraSensorPrivate
   public: bool initialized = false;
 
     /// \brief Rendering camera
-  public: ignition::rendering::DepthCameraPtr depthCamera;
+  public: gz::rendering::DepthCameraPtr depthCamera;
 
   /// \brief Depth data buffer.
   public: float *depthBuffer = nullptr;
@@ -99,24 +94,24 @@ class ignition::sensors::DepthCameraSensorPrivate
   public: float near = 0.0;
 
   /// \brief Pointer to an image to be published
-  public: ignition::rendering::Image image;
+  public: gz::rendering::Image image;
 
   /// \brief Noise added to sensor data
   public: std::map<SensorNoiseType, NoisePtr> noises;
 
   /// \brief Event that is used to trigger callbacks when a new image
   /// is generated
-  public: ignition::common::EventT<
-          void(const ignition::msgs::Image &)> imageEvent;
+  public: gz::common::EventT<
+          void(const gz::msgs::Image &)> imageEvent;
 
   /// \brief Connection from depth camera with new depth data
-  public: ignition::common::ConnectionPtr depthConnection;
+  public: gz::common::ConnectionPtr depthConnection;
 
   /// \brief Connection from depth camera with new point cloud data
-  public: ignition::common::ConnectionPtr pointCloudConnection;
+  public: gz::common::ConnectionPtr pointCloudConnection;
 
   /// \brief Connection to the Manager's scene change event.
-  public: ignition::common::ConnectionPtr sceneChangeConnection;
+  public: gz::common::ConnectionPtr sceneChangeConnection;
 
   /// \brief Just a mutex for thread safety
   public: std::mutex mutex;
@@ -147,7 +142,7 @@ class ignition::sensors::DepthCameraSensorPrivate
   public: transport::Node::Publisher pointPub;
 };
 
-using namespace ignition;
+using namespace gz;
 using namespace sensors;
 
 //////////////////////////////////////////////////
@@ -178,19 +173,19 @@ bool DepthCameraSensorPrivate::ConvertDepthToImage(
 //////////////////////////////////////////////////
 bool DepthCameraSensorPrivate::SaveImage(const float *_data,
     unsigned int _width, unsigned int _height,
-    ignition::common::Image::PixelFormatType /*_format*/)
+    common::Image::PixelFormatType /*_format*/)
 {
   // Attempt to create the directory if it doesn't exist
-  if (!ignition::common::isDirectory(this->saveImagePath))
+  if (!common::isDirectory(this->saveImagePath))
   {
-    if (!ignition::common::createDirectories(this->saveImagePath))
+    if (!common::createDirectories(this->saveImagePath))
       return false;
   }
 
   if (_width == 0 || _height == 0)
     return false;
 
-  ignition::common::Image localImage;
+  common::Image localImage;
 
   unsigned int depthSamples = _width * _height;
   unsigned int depthBufferSize = depthSamples * 3;
@@ -206,7 +201,7 @@ bool DepthCameraSensorPrivate::SaveImage(const float *_data,
   localImage.SetFromData(imgDepthBuffer, _width, _height,
       common::Image::RGB_INT8);
   localImage.SavePNG(
-      ignition::common::joinPaths(this->saveImagePath, filename));
+      common::joinPaths(this->saveImagePath, filename));
 
   delete[] imgDepthBuffer;
   return true;
@@ -258,13 +253,13 @@ bool DepthCameraSensor::Load(const sdf::Sensor &_sdf)
   // Check if this is the right type
   if (_sdf.Type() != sdf::SensorType::DEPTH_CAMERA)
   {
-    ignerr << "Attempting to a load a Depth Camera sensor, but received "
+    gzerr << "Attempting to a load a Depth Camera sensor, but received "
       << "a " << _sdf.TypeStr() << std::endl;
   }
 
   if (_sdf.CameraSensor() == nullptr)
   {
-    ignerr << "Attempting to a load a Depth Camera sensor, but received "
+    gzerr << "Attempting to a load a Depth Camera sensor, but received "
       << "a null sensor." << std::endl;
     return false;
   }
@@ -275,16 +270,16 @@ bool DepthCameraSensor::Load(const sdf::Sensor &_sdf)
     this->SetTopic("/camera/depth");
 
   this->dataPtr->pub =
-      this->dataPtr->node.Advertise<ignition::msgs::Image>(
+      this->dataPtr->node.Advertise<msgs::Image>(
           this->Topic());
   if (!this->dataPtr->pub)
   {
-    ignerr << "Unable to create publisher on topic["
+    gzerr << "Unable to create publisher on topic["
       << this->Topic() << "].\n";
     return false;
   }
 
-  igndbg << "Depth images for [" << this->Name() << "] advertised on ["
+  gzdbg << "Depth images for [" << this->Name() << "] advertised on ["
          << this->Topic() << "]" << std::endl;
 
   if (!this->AdvertiseInfo())
@@ -292,16 +287,16 @@ bool DepthCameraSensor::Load(const sdf::Sensor &_sdf)
 
   // Create the point cloud publisher
   this->dataPtr->pointPub =
-      this->dataPtr->node.Advertise<ignition::msgs::PointCloudPacked>(
+      this->dataPtr->node.Advertise<msgs::PointCloudPacked>(
           this->Topic() + "/points");
   if (!this->dataPtr->pointPub)
   {
-    ignerr << "Unable to create publisher on topic["
+    gzerr << "Unable to create publisher on topic["
       << this->Topic() + "/points" << "].\n";
     return false;
   }
 
-  igndbg << "Points for [" << this->Name() << "] advertised on ["
+  gzdbg << "Points for [" << this->Name() << "] advertised on ["
          << this->Topic() << "/points]" << std::endl;
 
   // Initialize the point message.
@@ -334,7 +329,7 @@ bool DepthCameraSensor::CreateCamera()
 
   if (!cameraSdf)
   {
-    ignerr << "Unable to access camera SDF element\n";
+    gzerr << "Unable to access camera SDF element\n";
     return false;
   }
 
@@ -375,7 +370,7 @@ bool DepthCameraSensor::CreateCamera()
     }
     else if (noiseSdf.Type() != sdf::NoiseType::NONE)
     {
-      ignwarn << "The depth camera sensor only supports Gaussian noise. "
+      gzwarn << "The depth camera sensor only supports Gaussian noise. "
        << "The supplied noise type[" << static_cast<int>(noiseSdf.Type())
        << "] is not supported." << std::endl;
     }
@@ -389,9 +384,9 @@ bool DepthCameraSensor::CreateCamera()
   this->dataPtr->depthCamera->SetAntiAliasing(2);
 
   math::Angle angle = cameraSdf->HorizontalFov();
-  if (angle < 0.01 || angle > IGN_PI*2)
+  if (angle < 0.01 || angle > GZ_PI*2)
   {
-    ignerr << "Invalid horizontal field of view [" << angle << "]\n";
+    gzerr << "Invalid horizontal field of view [" << angle << "]\n";
 
     return false;
   }
@@ -447,8 +442,8 @@ void DepthCameraSensor::OnNewDepthFrame(const float *_scan,
   unsigned int depthSamples = _width * _height;
   unsigned int depthBufferSize = depthSamples * sizeof(float);
 
-  ignition::common::Image::PixelFormatType format =
-    ignition::common::Image::ConvertPixelFormat(_format);
+  common::Image::PixelFormatType format =
+    common::Image::ConvertPixelFormat(_format);
 
   if (!this->dataPtr->depthBuffer)
     this->dataPtr->depthBuffer = new float[depthSamples];
@@ -482,20 +477,20 @@ void DepthCameraSensor::OnNewRgbPointCloud(const float *_scan,
 }
 
 /////////////////////////////////////////////////
-ignition::rendering::DepthCameraPtr DepthCameraSensor::DepthCamera()
+rendering::DepthCameraPtr DepthCameraSensor::DepthCamera() const
 {
   return this->dataPtr->depthCamera;
 }
 
 /////////////////////////////////////////////////
-ignition::common::ConnectionPtr DepthCameraSensor::ConnectImageCallback(
-    std::function<void(const ignition::msgs::Image &)> _callback)
+common::ConnectionPtr DepthCameraSensor::ConnectImageCallback(
+    std::function<void(const msgs::Image &)> _callback)
 {
   return this->dataPtr->imageEvent.Connect(_callback);
 }
 
 /////////////////////////////////////////////////
-void DepthCameraSensor::SetScene(ignition::rendering::ScenePtr _scene)
+void DepthCameraSensor::SetScene(rendering::ScenePtr _scene)
 {
   std::lock_guard<std::mutex> lock(this->dataPtr->mutex);
   // APIs make it possible for the scene pointer to change
@@ -514,16 +509,27 @@ void DepthCameraSensor::SetScene(ignition::rendering::ScenePtr _scene)
 bool DepthCameraSensor::Update(
   const std::chrono::steady_clock::duration &_now)
 {
-  IGN_PROFILE("DepthCameraSensor::Update");
+  GZ_PROFILE("DepthCameraSensor::Update");
   if (!this->dataPtr->initialized)
   {
-    ignerr << "Not initialized, update ignored.\n";
+    gzerr << "Not initialized, update ignored.\n";
     return false;
   }
 
   if (!this->dataPtr->depthCamera)
   {
-    ignerr << "Camera doesn't exist.\n";
+    gzerr << "Camera doesn't exist.\n";
+    return false;
+  }
+
+  if (this->HasInfoConnections())
+  {
+    // publish the camera info message
+    this->PublishInfo(_now);
+  }
+
+  if (!this->HasDepthConnections() && !this->HasPointConnections())
+  {
     return false;
   }
 
@@ -536,7 +542,7 @@ bool DepthCameraSensor::Update(
   auto msgsFormat = msgs::PixelFormatType::R_FLOAT32;
 
   // create message
-  ignition::msgs::Image msg;
+  msgs::Image msg;
   msg.set_width(width);
   msg.set_height(height);
   msg.set_step(width * rendering::PixelUtil::BytesPerPixel(
@@ -555,8 +561,6 @@ bool DepthCameraSensor::Update(
   this->AddSequence(msg.mutable_header(), "default");
   this->dataPtr->pub.Publish(msg);
 
-  // publish the camera info message
-  this->PublishInfo(_now);
 
   if (this->dataPtr->imageEvent.ConnectionCount() > 0u)
   {
@@ -567,11 +571,11 @@ bool DepthCameraSensor::Update(
     }
     catch(...)
     {
-      ignerr << "Exception thrown in an image callback.\n";
+      gzerr << "Exception thrown in an image callback.\n";
     }
   }
 
-  if (this->dataPtr->pointPub.HasConnections() &&
+  if (this->HasPointConnections() &&
       this->dataPtr->pointCloudBuffer)
   {
     // Set the time stamp
@@ -637,7 +641,19 @@ double DepthCameraSensor::NearClip() const
 //////////////////////////////////////////////////
 bool DepthCameraSensor::HasConnections() const
 {
-  return (this->dataPtr->pub && this->dataPtr->pub.HasConnections()) ||
-      (this->dataPtr->pointPub && this->dataPtr->pointPub.HasConnections()) ||
-      this->dataPtr->imageEvent.ConnectionCount() > 0u;
+  return this->HasDepthConnections() || this->HasPointConnections() ||
+      this->HasInfoConnections();
+}
+
+//////////////////////////////////////////////////
+bool DepthCameraSensor::HasDepthConnections() const
+{
+  return (this->dataPtr->pub && this->dataPtr->pub.HasConnections())
+         || this->dataPtr->imageEvent.ConnectionCount() > 0u;
+}
+
+//////////////////////////////////////////////////
+bool DepthCameraSensor::HasPointConnections() const
+{
+  return this->dataPtr->pointPub && this->dataPtr->pointPub.HasConnections();
 }
