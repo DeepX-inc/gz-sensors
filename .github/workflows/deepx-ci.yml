@@ -4,9 +4,9 @@ run-name: Build Docker container and perform unit testing
 
 on: 
   push:
-    branches: [ign-sensors6]
+    branches: [gz-sensors7]
   pull_request:
-    branches: [ign-sensors6]
+    branches: [gz-sensors7]
   workflow_dispatch:
 
 jobs:
