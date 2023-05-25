@@ -24,7 +24,7 @@ jobs:
           username: deepx-inc
           password: ${{ github.token }}
 
-      - name: Build and commit the Docker container
+      - name: Build the Docker image
         run: |
           docker build -t deepx-gz-sensors .
       
@@ -33,8 +33,8 @@ jobs:
           docker run deepx-gz-sensors:latest bash \
           -c 'cd /root/gazebo/gz-rendering/build; \
           cmake ..; \
-          cmake --build . --target install; \
+          cmake --build . --target install -j 16; \
           cd /root/gazebo/gz-sensors/build; \
           cmake ..; \
-          cmake --build . --target install; \
+          cmake --build . --target install -j 16; \
           ctest;'
