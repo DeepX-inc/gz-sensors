@@ -72,7 +72,7 @@ class gz::sensors::GpuLidarSensorPrivate
   public: transport::Node::Publisher pointPub;
   
   /// \brief Scanning pattern.
-  public: ignition::rendering::ScanningPattern scanningPattern = ignition::rendering::ScanningPattern::RASTERIZATION;
+  public: gz::rendering::ScanningPattern scanningPattern = gz::rendering::ScanningPattern::RASTERIZATION;
 };
 
 //////////////////////////////////////////////////
@@ -135,9 +135,9 @@ bool GpuLidarSensor::Load(const sdf::Sensor &_sdf)
   {
     auto pattern = _sdf.Element()->Get<std::string>("scanning_pattern");
 
-    const std::unordered_map<std::string, ignition::rendering::ScanningPattern> patterns {
-      {"avia", ignition::rendering::ScanningPattern::AVIA},
-      {"rasterization", ignition::rendering::ScanningPattern::RASTERIZATION},
+    const std::unordered_map<std::string, gz::rendering::ScanningPattern> patterns {
+      {"avia", gz::rendering::ScanningPattern::AVIA},
+      {"rasterization", gz::rendering::ScanningPattern::RASTERIZATION},
     };
 
     if (patterns.find(pattern) != patterns.end())
@@ -406,7 +406,7 @@ void GpuLidarSensorPrivate::FillPointCloudMsg(const float *_laserBuffer)
       float zenith = _laserBuffer[index + 3];
 
       // Validate Depth/Radius and update pointcloud density flag
-      isDense &= !ignition::math::isnan(depth) & !std::isinf(depth);
+      isDense &= !gz::math::isnan(depth) & !std::isinf(depth);
       
       uint16_t ring = j;
       

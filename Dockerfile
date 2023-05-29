@@ -39,7 +39,7 @@ RUN apt-get -qq update && \
     wget http://packages.osrfoundation.org/gazebo.key -O - | apt-key add - && \
     add-apt-repository ppa:kisak/kisak-mesa && \
     curl -sSL http://get.gazebosim.org | sh && \
-    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 800 --slave /usr/bin/g++ g++ /usr/bin/g++-8 --slave /usr/bin/gcov gcov /usr/bin/gcov-8 && \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 800 --slave /usr/bin/g++ g++ /usr/bin/g++-10 --slave /usr/bin/gcov gcov /usr/bin/gcov-10 && \
     apt-get -qq update && \
     apt-get -qq upgrade -y --no-install-recommends \
     libgz-cmake3-dev=3.2.* \
