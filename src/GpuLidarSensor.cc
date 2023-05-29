@@ -70,6 +70,9 @@ class gz::sensors::GpuLidarSensorPrivate
 
   /// \brief Publisher for the publish point cloud message.
   public: transport::Node::Publisher pointPub;
+  
+  /// \brief Scanning pattern.
+  public: ignition::rendering::ScanningPattern scanningPattern = ignition::rendering::ScanningPattern::RASTERIZATION;
 };
 
 //////////////////////////////////////////////////
@@ -126,6 +129,27 @@ bool GpuLidarSensor::Load(const sdf::Sensor &_sdf)
   if (!Lidar::Load(_sdf))
   {
     return false;
+  }
+
+  if (_sdf.Element()->HasElement("scanning_pattern"))
+  {
+    auto pattern = _sdf.Element()->Get<std::string>("scanning_pattern");
+
+    const std::unordered_map<std::string, ignition::rendering::ScanningPattern> patterns {
+      {"avia", ignition::rendering::ScanningPattern::AVIA},
+      {"rasterization", ignition::rendering::ScanningPattern::RASTERIZATION},
+    };
+
+    if (patterns.find(pattern) != patterns.end())
+    {
+      this->dataPtr->scanningPattern = patterns.at(pattern);
+    }
+    else
+    {
+      ignerr << "Unable to create a lidar with pattern [" 
+             << pattern << "]" << std::endl;
+      return false;
+    }
   }
 
   // Initialize the point message.
@@ -232,6 +256,8 @@ bool GpuLidarSensor::CreateLidar()
       std::bind(&GpuLidarSensor::OnNewLidarFrame, this,
       std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
       std::placeholders::_4, std::placeholders::_5));
+
+  this->dataPtr->gpuRays->SetScanningPattern(this->dataPtr->scanningPattern);
 
   this->AddSensor(this->dataPtr->gpuRays);
 
@@ -359,73 +385,56 @@ void GpuLidarSensorPrivate::FillPointCloudMsg(const float *_laserBuffer)
   GZ_PROFILE("GpuLidarSensorPrivate::FillPointCloudMsg");
   uint32_t width = this->pointMsg.width();
   uint32_t height = this->pointMsg.height();
-  unsigned int channels = 3;
-
-  float angleStep =
-    (this->gpuRays->AngleMax() - this->gpuRays->AngleMin()).Radian() /
-    (this->gpuRays->RangeCount()-1);
-
-  float verticleAngleStep = (this->gpuRays->VerticalAngleMax() -
-      this->gpuRays->VerticalAngleMin()).Radian() /
-    (this->gpuRays->VerticalRangeCount()-1);
-
-  // Angles of ray currently processing, azimuth is horizontal, inclination
-  // is vertical
-  float inclination = this->gpuRays->VerticalAngleMin().Radian();
+  unsigned int channels = this->gpuRays->Channels();
 
   std::string *msgBuffer = this->pointMsg.mutable_data();
-  msgBuffer->resize(this->pointMsg.row_step() *
-      this->pointMsg.height());
+  msgBuffer->resize(this->pointMsg.row_step() * height);
   char *msgBufferIndex = msgBuffer->data();
   // Set Pointcloud as dense. Change if invalid points are found.
-  bool isDense { true };
+  bool isDense = true;
   // Iterate over scan and populate point cloud
   for (uint32_t j = 0; j < height; ++j)
   {
-    float azimuth = this->gpuRays->AngleMin().Radian();
-
     for (uint32_t i = 0; i < width; ++i)
     {
       // Index of current point, and the depth value at that point
       auto index = j * width * channels + i * channels;
-      float depth = _laserBuffer[index];
-      // Validate Depth/Radius and update pointcloud density flag
-      if (isDense)
-        isDense = !(gz::math::isnan(depth) || std::isinf(depth));
+      float depth = _laserBuffer[index + 0];
 
       float intensity = _laserBuffer[index + 1];
+      float azimuth = _laserBuffer[index + 2];
+      float zenith = _laserBuffer[index + 3];
+
+      // Validate Depth/Radius and update pointcloud density flag
+      isDense &= !ignition::math::isnan(depth) & !std::isinf(depth);
+      
       uint16_t ring = j;
-
-      int fieldIndex = 0;
-
+      
       // Convert spherical coordinates to Cartesian for pointcloud
       // See https://en.wikipedia.org/wiki/Spherical_coordinate_system
       *reinterpret_cast<float *>(msgBufferIndex +
-          this->pointMsg.field(fieldIndex++).offset()) =
-        depth * std::cos(inclination) * std::cos(azimuth);
+          this->pointMsg.field(0).offset()) =
+        depth * std::cos(zenith) * std::cos(azimuth);
 
       *reinterpret_cast<float *>(msgBufferIndex +
-          this->pointMsg.field(fieldIndex++).offset()) =
-        depth * std::cos(inclination) * std::sin(azimuth);
+          this->pointMsg.field(1).offset()) =
+        depth * std::cos(zenith) * std::sin(azimuth);
 
       *reinterpret_cast<float *>(msgBufferIndex +
-          this->pointMsg.field(fieldIndex++).offset()) =
-        depth * std::sin(inclination);
+          this->pointMsg.field(2).offset()) =
+        depth * std::sin(zenith);
 
       // Intensity
       *reinterpret_cast<float *>(msgBufferIndex +
-          this->pointMsg.field(fieldIndex++).offset()) = intensity;
+          this->pointMsg.field(3).offset()) = intensity;
 
       // Ring
       *reinterpret_cast<uint16_t *>(msgBufferIndex +
-          this->pointMsg.field(fieldIndex++).offset()) = ring;
+          this->pointMsg.field(4).offset()) = ring;
 
       // Move the index to the next point.
       msgBufferIndex += this->pointMsg.point_step();
-
-      azimuth += angleStep;
     }
-    inclination += verticleAngleStep;
   }
   this->pointMsg.set_is_dense(isDense);
 }
