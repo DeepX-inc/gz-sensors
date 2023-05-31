@@ -63,7 +63,7 @@ RUN apt-get -qq update && \
 WORKDIR "/root/gazebo"
 
 # ---PREPARE GZ-RENDERING DIRECTORY---
-RUN git clone -b sync-to-origin-7-attempt-2 --single-branch https://github.com/DeepX-inc/gz-rendering.git && \
+RUN git clone -b 7-2023.05.31 --single-branch https://github.com/DeepX-inc/gz-rendering.git && \
     mkdir -p gz-rendering/build
 
 # ---PREPARE GZ-SENSORS DIRECTORY---
