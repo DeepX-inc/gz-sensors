@@ -131,9 +131,9 @@ bool GpuLidarSensor::Load(const sdf::Sensor &_sdf)
     return false;
   }
 
-  if (_sdf.Element()->HasElement("scanning_pattern"))
+  if (_sdf.Element()->HasElement("dpx:scanning_pattern"))
   {
-    auto pattern = _sdf.Element()->Get<std::string>("scanning_pattern");
+    auto pattern = _sdf.Element()->Get<std::string>("dpx:scanning_pattern");
 
     const std::unordered_map<std::string, gz::rendering::ScanningPattern> patterns {
       {"avia", gz::rendering::ScanningPattern::AVIA},
