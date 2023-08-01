@@ -20,28 +20,19 @@
   #include <Winsock2.h>
 #endif
 
-#include <ignition/common/Console.hh>
+#include <gz/common/Console.hh>
 
-// TODO(louise) Remove these pragmas once ign-rendering is disabling the
-// warnings
-#ifdef _WIN32
-#pragma warning(push)
-#pragma warning(disable: 4251)
-#endif
-#include <ignition/rendering/GaussianNoisePass.hh>
-#include <ignition/rendering/RenderPass.hh>
-#include <ignition/rendering/RenderEngine.hh>
-#include <ignition/rendering/RenderPassSystem.hh>
-#ifdef _WIN32
-#pragma warning(pop)
-#endif
+#include <gz/rendering/GaussianNoisePass.hh>
+#include <gz/rendering/RenderPass.hh>
+#include <gz/rendering/RenderEngine.hh>
+#include <gz/rendering/RenderPassSystem.hh>
 
-#include "ignition/sensors/ImageGaussianNoiseModel.hh"
+#include "gz/sensors/ImageGaussianNoiseModel.hh"
 
-using namespace ignition;
+using namespace gz;
 using namespace sensors;
 
-class ignition::sensors::ImageGaussianNoiseModelPrivate
+class gz::sensors::ImageGaussianNoiseModelPrivate
 {
   /// \brief If type starts with GAUSSIAN, the mean of the distribution
   /// from which we sample when adding noise.

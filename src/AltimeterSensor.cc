@@ -15,19 +15,29 @@
  *
 */
 
-#include <ignition/common/Profiler.hh>
-#include <ignition/transport/Node.hh>
+#if defined(_MSC_VER)
+  #pragma warning(push)
+  #pragma warning(disable: 4005)
+  #pragma warning(disable: 4251)
+#endif
+#include <gz/msgs/altimeter_sensor.pb.h>
+#if defined(_MSC_VER)
+  #pragma warning(pop)
+#endif
 
-#include "ignition/sensors/AltimeterSensor.hh"
-#include "ignition/sensors/Noise.hh"
-#include "ignition/sensors/SensorFactory.hh"
-#include "ignition/sensors/SensorTypes.hh"
+#include <gz/common/Profiler.hh>
+#include <gz/transport/Node.hh>
 
-using namespace ignition;
+#include "gz/sensors/AltimeterSensor.hh"
+#include "gz/sensors/Noise.hh"
+#include "gz/sensors/SensorFactory.hh"
+#include "gz/sensors/SensorTypes.hh"
+
+using namespace gz;
 using namespace sensors;
 
 /// \brief Private data for AltimeterSensor
-class ignition::sensors::AltimeterSensorPrivate
+class gz::sensors::AltimeterSensorPrivate
 {
   /// \brief node to create publisher
   public: transport::Node node;
@@ -92,7 +102,7 @@ bool AltimeterSensor::Load(const sdf::Sensor &_sdf)
     this->SetTopic("/altimeter");
 
   this->dataPtr->pub =
-      this->dataPtr->node.Advertise<ignition::msgs::Altimeter>(this->Topic());
+      this->dataPtr->node.Advertise<msgs::Altimeter>(this->Topic());
 
   if (!this->dataPtr->pub)
   {

@@ -15,47 +15,38 @@
  *
 */
 
-#ifdef _WIN32
-#pragma warning(push)
-#pragma warning(disable: 4005)
-#pragma warning(disable: 4251)
+#if defined(_MSC_VER)
+  #pragma warning(push)
+  #pragma warning(disable: 4005)
+  #pragma warning(disable: 4251)
 #endif
-#include <ignition/msgs/image.pb.h>
-#include <ignition/msgs/pointcloud_packed.pb.h>
-#ifdef _WIN32
-#pragma warning(pop)
-#endif
-
-#include <ignition/common/Image.hh>
-#include <ignition/common/Profiler.hh>
-#include <ignition/math/Helpers.hh>
-
-// TODO(louise) Remove these pragmas once ign-rendering is disabling the
-// warnings
-#ifdef _WIN32
-#pragma warning(push)
-#pragma warning(disable: 4251)
-#endif
-#include <ignition/rendering/Camera.hh>
-#include <ignition/rendering/DepthCamera.hh>
-#ifdef _WIN32
-#pragma warning(pop)
+#include <gz/msgs/image.pb.h>
+#include <gz/msgs/pointcloud_packed.pb.h>
+#if defined(_MSC_VER)
+  #pragma warning(pop)
 #endif
 
-#include <ignition/transport/Node.hh>
+#include <gz/common/Image.hh>
+#include <gz/common/Profiler.hh>
+#include <gz/math/Helpers.hh>
+
+#include <gz/rendering/Camera.hh>
+#include <gz/rendering/DepthCamera.hh>
+
+#include <gz/transport/Node.hh>
 
 #include <sdf/Sensor.hh>
 
-#include "ignition/sensors/ImageGaussianNoiseModel.hh"
-#include "ignition/sensors/ImageNoise.hh"
-#include "ignition/sensors/RgbdCameraSensor.hh"
-#include "ignition/sensors/RenderingEvents.hh"
-#include "ignition/sensors/SensorFactory.hh"
+#include "gz/sensors/ImageGaussianNoiseModel.hh"
+#include "gz/sensors/ImageNoise.hh"
+#include "gz/sensors/RgbdCameraSensor.hh"
+#include "gz/sensors/RenderingEvents.hh"
+#include "gz/sensors/SensorFactory.hh"
 
 #include "PointCloudUtil.hh"
 
 /// \brief Private data for RgbdCameraSensor
-class ignition::sensors::RgbdCameraSensorPrivate
+class gz::sensors::RgbdCameraSensorPrivate
 {
   /// \brief Depth data callback used to get the data from the sensor
   /// \param[in] _scan pointer to the data from the sensor
@@ -95,7 +86,7 @@ class ignition::sensors::RgbdCameraSensorPrivate
   public: bool initialized = false;
 
   /// \brief Rendering camera
-  public: ignition::rendering::DepthCameraPtr depthCamera;
+  public: gz::rendering::DepthCameraPtr depthCamera;
 
   /// \brief Depth data buffer.
   public: float *depthBuffer = nullptr;
@@ -123,19 +114,19 @@ class ignition::sensors::RgbdCameraSensorPrivate
   public: std::string opticalFrameId{""};
 
   /// \brief Pointer to an image to be published
-  public: ignition::rendering::Image image;
+  public: gz::rendering::Image image;
 
   /// \brief Noise added to sensor data
   public: std::map<SensorNoiseType, NoisePtr> noises;
 
   /// \brief Connection from depth camera with new depth data
-  public: ignition::common::ConnectionPtr depthConnection;
+  public: gz::common::ConnectionPtr depthConnection;
 
   /// \brief Connection from depth camera with new point cloud data
-  public: ignition::common::ConnectionPtr pointCloudConnection;
+  public: gz::common::ConnectionPtr pointCloudConnection;
 
   /// \brief Connection to the Manager's scene change event.
-  public: ignition::common::ConnectionPtr sceneChangeConnection;
+  public: gz::common::ConnectionPtr sceneChangeConnection;
 
   /// \brief Just a mutex for thread safety
   public: std::mutex mutex;
@@ -151,7 +142,7 @@ class ignition::sensors::RgbdCameraSensorPrivate
   public: PointCloudUtil pointsUtil;
 };
 
-using namespace ignition;
+using namespace gz;
 using namespace sensors;
 
 //////////////////////////////////////////////////
@@ -213,7 +204,7 @@ bool RgbdCameraSensor::Load(const sdf::Sensor &_sdf)
 
   // Create the 2d image publisher
   this->dataPtr->imagePub =
-      this->dataPtr->node.Advertise<ignition::msgs::Image>(
+      this->dataPtr->node.Advertise<msgs::Image>(
           this->Topic() + "/image");
   if (!this->dataPtr->imagePub)
   {
@@ -227,7 +218,7 @@ bool RgbdCameraSensor::Load(const sdf::Sensor &_sdf)
 
   // Create the depth image publisher
   this->dataPtr->depthPub =
-      this->dataPtr->node.Advertise<ignition::msgs::Image>(
+      this->dataPtr->node.Advertise<msgs::Image>(
           this->Topic() + "/depth_image");
   if (!this->dataPtr->depthPub)
   {
@@ -241,7 +232,7 @@ bool RgbdCameraSensor::Load(const sdf::Sensor &_sdf)
 
   // Create the point cloud publisher
   this->dataPtr->pointPub =
-      this->dataPtr->node.Advertise<ignition::msgs::PointCloudPacked>(
+      this->dataPtr->node.Advertise<msgs::PointCloudPacked>(
           this->Topic() + "/points");
   if (!this->dataPtr->pointPub)
   {
@@ -408,7 +399,7 @@ bool RgbdCameraSensor::CreateCameras()
 }
 
 /////////////////////////////////////////////////
-void RgbdCameraSensor::SetScene(ignition::rendering::ScenePtr _scene)
+void RgbdCameraSensor::SetScene(rendering::ScenePtr _scene)
 {
   std::lock_guard<std::mutex> lock(this->dataPtr->mutex);
   // APIs make it possible for the scene pointer to change
@@ -475,6 +466,19 @@ bool RgbdCameraSensor::Update(const std::chrono::steady_clock::duration &_now)
     return false;
   }
 
+  if (this->HasInfoConnections())
+  {
+    // publish the camera info message
+    this->PublishInfo(_now);
+  }
+
+  // don't render if there are no subscribers
+  if (!this->HasColorConnections() && !this->HasDepthConnections() &&
+    !this->HasPointConnections())
+  {
+    return false;
+  }
+
   unsigned int width = this->dataPtr->depthCamera->ImageWidth();
   unsigned int height = this->dataPtr->depthCamera->ImageHeight();
   unsigned int depthSamples = height * width;
@@ -483,9 +487,9 @@ bool RgbdCameraSensor::Update(const std::chrono::steady_clock::duration &_now)
   this->Render();
 
   // create and publish the depthmessage
-  if (this->dataPtr->depthPub.HasConnections())
+  if (this->HasDepthConnections())
   {
-    ignition::msgs::Image msg;
+    msgs::Image msg;
     msg.set_width(width);
     msg.set_height(height);
     msg.set_step(width * rendering::PixelUtil::BytesPerPixel(
@@ -509,12 +513,12 @@ bool RgbdCameraSensor::Update(const std::chrono::steady_clock::duration &_now)
         if (this->dataPtr->hasDepthFarClip &&
             (this->dataPtr->depthBuffer[i] > this->dataPtr->depthFarClip))
         {
-          this->dataPtr->depthBuffer[i] = ignition::math::INF_D;
+          this->dataPtr->depthBuffer[i] = math::INF_D;
         }
         if (this->dataPtr->hasDepthNearClip &&
             (this->dataPtr->depthBuffer[i] < this->dataPtr->depthNearClip))
         {
-          this->dataPtr->depthBuffer[i] = -ignition::math::INF_D;
+          this->dataPtr->depthBuffer[i] = -math::INF_D;
         }
       }
     }
@@ -541,11 +545,11 @@ bool RgbdCameraSensor::Update(const std::chrono::steady_clock::duration &_now)
     }
 
     // publish point cloud msg
-    if (this->dataPtr->pointPub.HasConnections())
+    if (this->HasPointConnections())
     {
+      // Set the time stamp
       *this->dataPtr->pointMsg.mutable_header()->mutable_stamp() =
         msgs::Convert(_now);
-      // Set the time stamp
       this->dataPtr->pointMsg.set_is_dense(true);
 
       if ((this->dataPtr->hasDepthNearClip || this->dataPtr->hasDepthFarClip)
@@ -583,7 +587,7 @@ bool RgbdCameraSensor::Update(const std::chrono::steady_clock::duration &_now)
     }
 
     // publish the 2d image message
-    if (this->dataPtr->imagePub.HasConnections())
+    if (this->HasColorConnections())
     {
       if (!filledImgData)
       {
@@ -597,7 +601,7 @@ bool RgbdCameraSensor::Update(const std::chrono::steady_clock::duration &_now)
 
       unsigned char *data = this->dataPtr->image.Data<unsigned char>();
 
-      ignition::msgs::Image msg;
+      msgs::Image msg;
       msg.set_width(width);
       msg.set_height(height);
       msg.set_step(width * rendering::PixelUtil::BytesPerPixel(
@@ -619,9 +623,6 @@ bool RgbdCameraSensor::Update(const std::chrono::steady_clock::duration &_now)
     }
   }
 
-  // publish the camera info message
-  this->PublishInfo(_now);
-
   return true;
 }
 
@@ -640,8 +641,24 @@ unsigned int RgbdCameraSensor::ImageHeight() const
 //////////////////////////////////////////////////
 bool RgbdCameraSensor::HasConnections() const
 {
-  return (this->dataPtr->imagePub &&
-      this->dataPtr->imagePub.HasConnections()) ||
-      (this->dataPtr->depthPub && this->dataPtr->depthPub.HasConnections()) ||
-      (this->dataPtr->pointPub && this->dataPtr->pointPub.HasConnections());
+  return this->HasColorConnections() || this->HasDepthConnections() ||
+         this->HasPointConnections() || this->HasInfoConnections();
+}
+
+//////////////////////////////////////////////////
+bool RgbdCameraSensor::HasColorConnections() const
+{
+  return this->dataPtr->imagePub && this->dataPtr->imagePub.HasConnections();
+}
+
+//////////////////////////////////////////////////
+bool RgbdCameraSensor::HasDepthConnections() const
+{
+  return this->dataPtr->depthPub && this->dataPtr->depthPub.HasConnections();
+}
+
+//////////////////////////////////////////////////
+bool RgbdCameraSensor::HasPointConnections() const
+{
+  return this->dataPtr->pointPub && this->dataPtr->pointPub.HasConnections();
 }

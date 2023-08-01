@@ -17,9 +17,9 @@
 #include <gtest/gtest.h>
 #include <sdf/sdf.hh>
 
-#include <ignition/sensors/Export.hh>
-#include <ignition/sensors/CameraSensor.hh>
-#include <ignition/sensors/Manager.hh>
+#include <gz/sensors/Export.hh>
+#include <gz/sensors/CameraSensor.hh>
+#include <gz/sensors/Manager.hh>
 
 sdf::ElementPtr cameraToBadSdf()
 {
@@ -48,7 +48,8 @@ sdf::ElementPtr cameraToBadSdf()
 
 sdf::ElementPtr CameraToSdf(const std::string &_type,
     const std::string &_name, double _updateRate,
-    const std::string &_topic, bool _alwaysOn, bool _visualize)
+    const std::string &_topic, const std::string &_cameraInfoTopic,
+    bool _alwaysOn, bool _visualize)
 {
   std::ostringstream stream;
   stream
@@ -62,6 +63,8 @@ sdf::ElementPtr CameraToSdf(const std::string &_type,
     << "      <always_on>"<< _alwaysOn <<"</always_on>"
     << "      <visualize>" << _visualize << "</visualize>"
     << "      <camera>"
+    << "        <camera_info_topic>" << _cameraInfoTopic
+                                     << "</camera_info_topic>"
     << "        <horizontal_fov>.75</horizontal_fov>"
     << "        <image>"
     << "          <width>640</width>"
@@ -107,6 +110,14 @@ sdf::ElementPtr CameraToSdf(const std::string &_type,
     << "            <cy>124</cy>"
     << "            <s>1.2</s>"
     << "          </intrinsics>"
+    << "          <projection>"
+    << "            <p_fx>282</p_fx>"
+    << "            <p_fy>283</p_fy>"
+    << "            <p_cx>163</p_cx>"
+    << "            <p_cy>125</p_cy>"
+    << "            <tx>1</tx>"
+    << "            <ty>2</ty>"
+    << "          </projection>"
     << "        </lens>"
     << "      </camera>"
     << "    </sensor>"
@@ -129,28 +140,28 @@ class Camera_TEST : public ::testing::Test
   // Documentation inherited
   protected: void SetUp() override
   {
-    ignition::common::Console::SetVerbosity(4);
+    gz::common::Console::SetVerbosity(4);
   }
 };
 
 //////////////////////////////////////////////////
 TEST(Camera_TEST, CreateCamera)
 {
-  ignition::sensors::Manager mgr;
+  gz::sensors::Manager mgr;
 
-  sdf::ElementPtr camSdf = CameraToSdf("camera", "my_camera", 60.0, "/cam",
-      true, true);
+  sdf::ElementPtr camSdf = CameraToSdf("camera", "my_camera", 60.0,
+    "/cam", "my_camera/camera_info", true, true);
 
   // Create a CameraSensor
-  ignition::sensors::CameraSensor *cam =
-    mgr.CreateSensor<ignition::sensors::CameraSensor>(camSdf);
+  gz::sensors::CameraSensor *cam =
+    mgr.CreateSensor<gz::sensors::CameraSensor>(camSdf);
 
   // Make sure the above dynamic cast worked.
   ASSERT_NE(nullptr, cam);
 
   // Check topics
   EXPECT_EQ("/cam", cam->Topic());
-  EXPECT_EQ("/camera_info", cam->InfoTopic());
+  EXPECT_EQ("my_camera/camera_info", cam->InfoTopic());
 
   // however camera is not loaded because a rendering scene is missing so
   // updates will not be successful and image size will be 0
@@ -162,8 +173,8 @@ TEST(Camera_TEST, CreateCamera)
   sdf::ElementPtr camBadSdf = cameraToBadSdf();
 
   // Create a CameraSensor
-  ignition::sensors::CameraSensor *badCam =
-    mgr.CreateSensor<ignition::sensors::CameraSensor>(camBadSdf);
+  gz::sensors::CameraSensor *badCam =
+    mgr.CreateSensor<gz::sensors::CameraSensor>(camBadSdf);
   EXPECT_TRUE(badCam == nullptr);
 }
 
@@ -177,40 +188,43 @@ TEST(Camera_TEST, Topic)
   const bool visualize = 1;
 
   // Factory
-  ignition::sensors::Manager mgr;
+  gz::sensors::Manager mgr;
 
   // Default topic
   {
     const std::string topic;
-    auto cameraSdf = CameraToSdf(type, name, updateRate, topic, alwaysOn,
-        visualize);
+    const std::string cameraInfoTopic;
+    auto cameraSdf = CameraToSdf(type, name, updateRate, topic, cameraInfoTopic,
+      alwaysOn, visualize);
 
     auto camera = mgr.CreateSensor<ignition::sensors::CameraSensor>(cameraSdf);
     ASSERT_NE(nullptr, camera);
-    EXPECT_NE(ignition::sensors::NO_SENSOR, camera->Id());
+    EXPECT_NE(gz::sensors::NO_SENSOR, camera->Id());
     EXPECT_EQ("/camera", camera->Topic());
+    EXPECT_EQ("/camera_info", camera->InfoTopic());
   }
 
   // Convert to valid topic
   {
     const std::string topic = "/topic with spaces/@~characters//";
-    auto cameraSdf = CameraToSdf(type, name, updateRate, topic, alwaysOn,
+    auto cameraSdf = CameraToSdf(type, name, updateRate, topic, "", alwaysOn,
         visualize);
 
     auto camera = mgr.CreateSensor<ignition::sensors::CameraSensor>(cameraSdf);
     ASSERT_NE(nullptr, camera);
-    EXPECT_NE(ignition::sensors::NO_SENSOR, camera->Id());
+    EXPECT_NE(gz::sensors::NO_SENSOR, camera->Id());
 
     EXPECT_EQ("/topic_with_spaces/characters", camera->Topic());
+    EXPECT_EQ("/topic_with_spaces/camera_info", camera->InfoTopic());
   }
 
   // Invalid topic
   {
     const std::string topic = "@@@";
-    auto cameraSdf = CameraToSdf(type, name, updateRate, topic, alwaysOn,
+    auto cameraSdf = CameraToSdf(type, name, updateRate, topic, "", alwaysOn,
         visualize);
 
-    auto sensor = mgr.CreateSensor<ignition::sensors::CameraSensor>(cameraSdf);
+    auto sensor = mgr.CreateSensor<gz::sensors::CameraSensor>(cameraSdf);
     EXPECT_EQ(nullptr, sensor);
   }
 }
