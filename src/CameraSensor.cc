@@ -41,7 +41,7 @@
 #include "gz/sensors/SensorFactory.hh"
 #include "gz/sensors/SensorTypes.hh"
 
-#include "gz/rendering/Utils.hh"
+#include <gz/rendering/Utils.hh>
 
 using namespace gz;
 using namespace sensors;
@@ -212,6 +212,13 @@ bool CameraSensor::CreateCamera()
   unsigned int width = cameraSdf->ImageWidth();
   unsigned int height = cameraSdf->ImageHeight();
 
+  if (width == 0u || height == 0u)
+  {
+    gzerr << "Unable to create a camera sensor with 0 width or height."
+          << std::endl;
+    return false;
+  }
+
   this->dataPtr->camera = this->Scene()->CreateCamera(this->Name());
   this->dataPtr->camera->SetImageWidth(width);
   this->dataPtr->camera->SetImageHeight(height);
@@ -257,7 +264,8 @@ bool CameraSensor::CreateCamera()
   this->dataPtr->camera->SetAspectRatio(static_cast<double>(width)/height);
   this->dataPtr->camera->SetHFOV(angle);
 
-  if (cameraSdf->Element()->HasElement("distortion")) {
+  if (cameraSdf->Element() != nullptr &&
+      cameraSdf->Element()->HasElement("distortion")) {
     this->dataPtr->distortion =
         ImageDistortionFactory::NewDistortionModel(*cameraSdf, "camera");
     this->dataPtr->distortion->Load(*cameraSdf);
@@ -671,7 +679,7 @@ bool CameraSensor::Update(const std::chrono::steady_clock::duration &_now)
       }
       catch(...)
       {
-        ignerr << "Exception thrown in an image callback.\n";
+        gzerr << "Exception thrown in an image callback.\n";
       }
     }
 
@@ -918,6 +926,12 @@ bool CameraSensor::HasImageConnections() const
 bool CameraSensor::HasInfoConnections() const
 {
   return this->dataPtr->infoPub && this->dataPtr->infoPub.HasConnections();
+}
+
+//////////////////////////////////////////////////
+const std::string& CameraSensor::OpticalFrameId() const
+{
+  return this->dataPtr->opticalFrameId;
 }
 
 //////////////////////////////////////////////////

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.10.2 FATAL_ERROR)
 #============================================================================
 # Initialize the project
 #============================================================================
-project(gz-sensors7 VERSION 7.2.0)
+project(gz-sensors7 VERSION 7.3.1)
 
 #============================================================================
 # Find gz-cmake
@@ -38,11 +38,9 @@ message(STATUS "\n\n-- ====== Finding Dependencies ======")
 
 #--------------------------------------
 # Find Protobuf
-set(REQ_PROTOBUF_VER 3)
 gz_find_package(GzProtobuf
-                 VERSION ${REQ_PROTOBUF_VER}
-                 REQUIRED
-                 PRETTY Protobuf)
+                REQUIRED
+                PRETTY Protobuf)
 
 #--------------------------------------
 # Find gz-math

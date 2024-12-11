@@ -299,15 +299,6 @@ bool DepthCameraSensor::Load(const sdf::Sensor &_sdf)
   gzdbg << "Points for [" << this->Name() << "] advertised on ["
          << this->Topic() << "/points]" << std::endl;
 
-  // Initialize the point message.
-  // \todo(anyone) The true value in the following function call forces
-  // the xyz and rgb fields to be aligned to memory boundaries. This is need
-  // by ROS1: https://github.com/ros/common_msgs/pull/77. Ideally, memory
-  // alignment should be configured.
-  msgs::InitPointCloudPacked(this->dataPtr->pointMsg, this->Name(), true,
-      {{"xyz", msgs::PointCloudPacked::Field::FLOAT32},
-       {"rgb", msgs::PointCloudPacked::Field::FLOAT32}});
-
   if (this->Scene())
   {
     this->CreateCamera();
@@ -333,8 +324,15 @@ bool DepthCameraSensor::CreateCamera()
     return false;
   }
 
-  int width = cameraSdf->ImageWidth();
-  int height = cameraSdf->ImageHeight();
+  unsigned int width = cameraSdf->ImageWidth();
+  unsigned int height = cameraSdf->ImageHeight();
+
+  if (width == 0u || height == 0u)
+  {
+    gzerr << "Unable to create a depth camera sensor with 0 width or height."
+          << std::endl;
+    return false;
+  }
 
   double far = cameraSdf->FarClip();
   double near = cameraSdf->NearClip();
@@ -421,6 +419,18 @@ bool DepthCameraSensor::CreateCamera()
       std::bind(&DepthCameraSensor::OnNewRgbPointCloud, this,
         std::placeholders::_1, std::placeholders::_2, std::placeholders::_3,
         std::placeholders::_4, std::placeholders::_5));
+
+  // Initialize the point message.
+  // \todo(anyone) The true value in the following function call forces
+  // the xyz and rgb fields to be aligned to memory boundaries. This is need
+  // by ROS1: https://github.com/ros/common_msgs/pull/77. Ideally, memory
+  // alignment should be configured.
+  msgs::InitPointCloudPacked(
+        this->dataPtr->pointMsg,
+        this->OpticalFrameId(),
+        true,
+        {{"xyz", msgs::PointCloudPacked::Field::FLOAT32},
+         {"rgb", msgs::PointCloudPacked::Field::FLOAT32}});
 
   // Set the values of the point message based on the camera information.
   this->dataPtr->pointMsg.set_width(this->ImageWidth());
@@ -549,9 +559,10 @@ bool DepthCameraSensor::Update(
                rendering::PF_FLOAT32_R));
   msg.set_pixel_format_type(msgsFormat);
   *msg.mutable_header()->mutable_stamp() = msgs::Convert(_now);
-  auto frame = msg.mutable_header()->add_data();
+
+  auto* frame = msg.mutable_header()->add_data();
   frame->set_key("frame_id");
-  frame->add_value(this->FrameId());
+  frame->add_value(this->OpticalFrameId());
 
   std::lock_guard<std::mutex> lock(this->dataPtr->mutex);
   msg.set_data(this->dataPtr->depthBuffer,
