@@ -12,12 +12,12 @@ FROM ghcr.io/deepx-inc/base_images:humble
 # ---BUILD TOOLS---
 RUN apt-get -qq update \
     && apt-get -qq install -y --no-install-recommends \
-    cmake=3.22.* \
-    ffmpeg=7:4.4.* \
-    freeglut3-dev=2.8.* \
-    g++-10=10.4.* \
-    git=1:2.34.* \
-    gnupg=2.2.* \
+    cmake \
+    ffmpeg \
+    freeglut3-dev \
+    g++ \
+    git \
+    gnupg \
     libfreeimage-dev=3.18.* \
     libglew-dev=2.2.* \
     libogre-next-dev=2.2.* \
@@ -25,8 +25,6 @@ RUN apt-get -qq update \
     libxmu-dev=2:1.* \
     ninja-build=1.10.* \
     pkg-config=0.29.* \
-    redis-server=5:6.0.* \
-    redis-tools=5:6.0.* \
     software-properties-common=0.99.22.* \
     lsb-release=11.1.* \
     wget=1.21.* \
@@ -39,23 +37,22 @@ RUN apt-get -qq update && \
     wget http://packages.osrfoundation.org/gazebo.key -O - | apt-key add - && \
     add-apt-repository ppa:kisak/kisak-mesa && \
     curl -sSL http://get.gazebosim.org | sh && \
-    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 800 --slave /usr/bin/g++ g++ /usr/bin/g++-10 --slave /usr/bin/gcov gcov /usr/bin/gcov-10 && \
     apt-get -qq update && \
     apt-get -qq upgrade -y --no-install-recommends \
-    libgz-cmake3-dev=3.2.* \
-    libgz-common5-dev=5.4.* \
-    libgz-fuel-tools8-dev=8.0.* \
-    libgz-gui7-dev=7.2.* \
-    libgz-launch6-dev=6.0.* \
-    libgz-math7-dev=7.1.* \
-    libgz-msgs9-dev=9.4.* \
-    libgz-physics6-dev=6.4.* \
-    libgz-plugin2-dev=2.0.* \
-    libgz-sim7-dev=7.5.* \
-    libgz-tools2-dev=2.0.* \
-    libgz-transport12-dev=12.2.* \
-    libgz-utils2-dev=2.0.* \
-    libsdformat13=13.5.* \
+    libgz-cmake3-dev \
+    libgz-common5-dev \
+    libgz-fuel-tools8-dev \
+    libgz-gui7-dev \
+    libgz-launch6-dev \
+    libgz-math7-dev \
+    libgz-msgs9-dev \
+    libgz-physics6-dev \
+    libgz-plugin2-dev \
+    libgz-sim7-dev \
+    libgz-tools2-dev \
+    libgz-transport12-dev \
+    libgz-utils2-dev \
+    libsdformat13 \
     && apt-get -qq -y autoclean \
     && apt-get -qq -y autoremove \
     && rm -rf /var/lib/apt/lists/*
@@ -69,4 +66,6 @@ RUN git clone -b gz-rendering7 --single-branch https://github.com/DeepX-inc/gz-r
 # ---PREPARE GZ-SENSORS DIRECTORY---
 COPY . gz-sensors/
 
-RUN mkdir -p gz-sensors/build
+RUN mkdir -p gz-rendering/build && cd gz-rendering/build && cmake .. && make -j4 && make install
+
+RUN mkdir -p gz-sensors/build && cd gz-sensors/build && cmake .. && make -j4
