@@ -240,12 +240,7 @@ bool RgbdCameraSensor::Load(const sdf::Sensor &_sdf)
   if (!this->AdvertiseInfo(this->Topic() + "/camera_info"))
     return false;
 
-  // Initialize the point message.
-  // \todo(anyone) The true value in the following function call forces
-  // the xyz and rgb fields to be aligned to memory boundaries. This is need
-  // by ROS1: https://github.com/ros/common_msgs/pull/77. Ideally, memory
-  // alignment should be configured.
-  msgs::InitPointCloudPacked(this->dataPtr->pointMsg, this->FrameId(), true,
+  msgs::InitPointCloudPacked(this->dataPtr->pointMsg, this->FrameId(), false,
       {{"xyz", msgs::PointCloudPacked::Field::FLOAT32},
        {"rgb", msgs::PointCloudPacked::Field::FLOAT32}});
 
